@@ -534,7 +534,7 @@ viewer.addEventListener("pointerdown", e => {
     e.preventDefault();
     const a = p.annots.find(x => x.id === anEl.dataset.aid); if (!a) return;
     movingText = true;
-    dragAnnot(e, p, a, anEl, layer, false, null, () => { movingText = false; const pa = pageById(p.id); const aa = pa && pa.annots.find(x => x.id === a.id); if (aa) { S.editing = null; startEditing(pa, aa); } });
+    dragAnnot(e, p, a, anEl, layer, false, null, tp => { movingText = false; const aa = tp.annots.find(x => x.id === a.id); if (aa) { S.editing = null; startEditing(tp, aa); } });
     return;
   }
   if (S.editing) stopEditing(true);
@@ -567,13 +567,21 @@ function track(onMove, onUp) {
   window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up); window.addEventListener("pointercancel", up);
 }
 let movingText = false;
+function pageUnder(x, y) {
+  for (const w of viewer.querySelectorAll(".pg")) { const r = w.getBoundingClientRect(); if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return w; }
+  return null;
+}
 function dragAnnot(e, p, a, target, layer, resizing, onClick, onEnd) {
   const s0 = ptIn(layer, e), orig = JSON.parse(JSON.stringify(a)); let moved = false;
-  const d = disp(p), z = S.zoom, l0 = parseFloat(target.style.left) || 0, t0 = parseFloat(target.style.top) || 0;
-  track(ev => {
-    const pt = ptIn(layer, ev), dx = pt.x - s0.x, dy = pt.y - s0.y;
-    if (!moved && Math.hypot(dx, dy) * z < 3) return; moved = true;
+  const z = S.zoom, l0 = parseFloat(target.style.left) || 0, t0 = parseFloat(target.style.top) || 0;
+  // origin of the element (top-left) and where inside it the pointer grabbed it
+  const o0 = a.type === "ink" ? (() => { const b = inkBox(a); return { x: b.x, y: b.y }; })() : { x: a.x, y: a.y };
+  const grab = { x: s0.x - o0.x, y: s0.y - o0.y };
+  let tp = p, tLayer = layer, lastEv = e, raf = 0;
+
+  const apply = ev => {
     if (resizing) {
+      const pt = ptIn(layer, ev), dx = pt.x - s0.x, dy = pt.y - s0.y;
       if (a.type === "text") {
         const w0 = Math.max(10, (target.offsetWidth / z) || 10);
         a.size = Math.max(4, Math.min(144, Math.round(orig.size * (w0 + dx) / w0 * 2) / 2));
@@ -583,17 +591,53 @@ function dragAnnot(e, p, a, target, layer, resizing, onClick, onEnd) {
         if (a.type === "image" && !ev.shiftKey) { h = w * orig.h / orig.w; }
         a.w = w; a.h = h; target.style.width = w * z + "px"; target.style.height = h * z + "px";
       }
-    } else if (a.type === "ink") {
+      return;
+    }
+    // moving: the element follows the pointer, also onto other pages
+    const w = pageUnder(ev.clientX, ev.clientY);
+    if (w && w.dataset.id !== tp.id) {
+      const np = pageById(w.dataset.id);
+      if (np) { tp = np; tLayer = w.querySelector(".layer"); tLayer.append(target); if (S.cur !== np.id) setCur(np.id, false); }
+    }
+    const d = disp(tp), pt = ptIn(tLayer, ev);
+    const bw = a.type === "ink" ? inkBox(orig).w : a.type === "text" ? target.offsetWidth / z : a.w;
+    const bh = a.type === "ink" ? inkBox(orig).h : a.type === "text" ? target.offsetHeight / z : a.h;
+    const nx = Math.max(-bw + 12, Math.min(d.w - 12, pt.x - grab.x));
+    const ny = Math.max(-bh + 12, Math.min(d.h - 12, pt.y - grab.y));
+    if (a.type === "ink") {
+      const dx = nx - o0.x, dy = ny - o0.y;
       a.pts = orig.pts.map(([x, y]) => [x + dx, y + dy]);
       target.style.left = l0 + dx * z + "px"; target.style.top = t0 + dy * z + "px";
     } else {
-      a.x = Math.max(-20, Math.min(d.w - 10, orig.x + dx)); a.y = Math.max(-20, Math.min(d.h - 10, orig.y + dy));
-      target.style.left = a.x * z + "px"; target.style.top = a.y * z + "px";
+      a.x = nx; a.y = ny; target.style.left = nx * z + "px"; target.style.top = ny * z + "px";
     }
+  };
+  // scroll the document when the pointer is near the top or bottom edge, so the element can reach any page
+  const autoScroll = () => {
+    raf = 0; if (!moved || resizing) return;
+    const vr = viewer.getBoundingClientRect(), edge = 48, y = lastEv.clientY;
+    let v = 0;
+    if (y < vr.top + edge) v = -Math.ceil((vr.top + edge - y) / 3);
+    else if (y > vr.bottom - edge) v = Math.ceil((y - (vr.bottom - edge)) / 3);
+    if (v) { viewer.scrollTop += Math.max(-24, Math.min(24, v)); apply(lastEv); raf = requestAnimationFrame(autoScroll); }
+  };
+  track(ev => {
+    lastEv = ev;
+    if (!moved) { const pt = ptIn(layer, ev); if (Math.hypot(pt.x - s0.x, pt.y - s0.y) * z < 3) return; moved = true; }
+    apply(ev);
+    if (!raf) raf = requestAnimationFrame(autoScroll);
   }, () => {
-    if (moved) { renderLayer(p); renderProps(true); commit(); }
-    else if (onClick) onClick();
-    if (onEnd) onEnd();
+    if (raf) cancelAnimationFrame(raf); raf = 0;
+    if (moved) {
+      if (tp !== p) {
+        p.annots = p.annots.filter(x => x.id !== a.id); tp.annots.push(a);
+        S.sel = { pid: tp.id, aid: a.id };
+        if (S.editing && S.editing.aid === a.id) S.editing.pid = tp.id;
+        renderLayer(p);
+      }
+      renderLayer(tp); renderProps(true); commit();
+    } else if (onClick) onClick();
+    if (onEnd) onEnd(tp);
   });
 }
 function drawRect(e, p, layer, s0) {
