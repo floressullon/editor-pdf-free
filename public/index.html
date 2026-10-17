@@ -17,10 +17,13 @@
   <div class="top">
     <div class="brand"><div class="brand-mark" aria-hidden="true"></div><h1 id="appName"></h1></div>
     <div class="grp">
+      <button class="btn" id="bNew" title="Nuevo documento en blanco"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg><span class="lbl">Nuevo</span></button>
       <button class="btn" id="bOpen" title="Abrir PDF o imágenes (reemplaza lo actual)"><svg viewBox="0 0 24 24"><path d="M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 18V9a1.5 1.5 0 0 0-1.5-1.5h-8l-2-2.5h-5A1.5 1.5 0 0 0 3 6.5z"/></svg><span class="lbl">Abrir</span></button>
       <button class="btn" id="bAppend" title="Añadir otros PDF o imágenes al final (fusionar)"><svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M13 12v6M10 15h6"/></svg><span class="lbl">Fusionar / añadir</span></button>
       <button class="btn primary" id="bSave" title="Guardar el PDF con todos los cambios"><svg viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg><span class="lbl">Guardar PDF</span></button>
+      <button class="btn" id="bClose" title="Cerrar el documento"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg><span class="lbl">Cerrar</span></button>
     </div>
+    <span class="doclabel" id="docLabel" hidden></span>
     <div class="spacer"></div>
     <div class="grp">
       <button class="icon-btn" id="bUndo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>

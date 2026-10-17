@@ -1,5 +1,5 @@
 // Versión de escritorio: abre el mismo editor web en una ventana propia.
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, shell, dialog } = require("electron");
 const path = require("path");
 const config = require("../public/js/config.js");
 
@@ -16,6 +16,20 @@ function createWindow() {
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   win.loadFile(path.join(__dirname, "..", "public", "index.html"));
+
+  // Si hay cambios sin guardar, preguntar antes de cerrar la ventana.
+  win.webContents.on("will-prevent-unload", event => {
+    const choice = dialog.showMessageBoxSync(win, {
+      type: "question",
+      buttons: ["Salir sin guardar", "Cancelar"],
+      defaultId: 1,
+      cancelId: 1,
+      title: config.name,
+      message: "Tienes cambios sin guardar.",
+      detail: "Si sales ahora, se perderán."
+    });
+    if (choice === 0) event.preventDefault();
+  });
 
   // Los enlaces externos se abren en el navegador del sistema.
   win.webContents.setWindowOpenHandler(({ url }) => {

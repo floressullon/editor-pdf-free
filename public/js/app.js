@@ -55,11 +55,26 @@ function commit() {
   S.undo.push(base); if (S.undo.length > 100) S.undo.shift();
   S.redo = []; base = s; updUndo(); thumbsAnnotBadges();
 }
-function resetHistory() { S.undo = []; S.redo = []; base = snap(); updUndo(); }
+function resetHistory() { S.undo = []; S.redo = []; base = snap(); savedBase = base; updUndo(); }
+let savedBase = "[]";
+const isDirty = () => S.pages.length > 0 && !S.sample && base !== savedBase;
+function updDocLabel() {
+  const l = $("#docLabel"); if (!l) return;
+  if (!S.pages.length) { l.hidden = true; return; }
+  const dirty = isDirty();
+  l.hidden = false; l.textContent = S.docName + ".pdf"; l.classList.toggle("dirty", dirty);
+  l.title = dirty ? "Hay cambios sin guardar" : "Sin cambios pendientes";
+}
+function updateEnabled() {
+  const has = S.pages.length > 0;
+  ["#bSave", "#bClose", "#pRotL", "#pRotR", "#pDup", "#pDel", "#pBlank", "#pInsert", "#pExtract", "#pSplit", "#bZoomIn", "#bZoomOut", "#bFit"]
+    .forEach(s => { const b = $(s); if (b) b.disabled = !has; });
+  document.querySelectorAll(".tool").forEach(b => b.disabled = !has);
+}
 function restore(s) { S.pages = JSON.parse(s); base = s; S.sel = null; stopEditing(false); S.checked.clear(); if (!pageById(S.cur)) S.cur = S.pages[0]?.id || null; renderAll(); updUndo(); }
 function undo() { if (!S.undo.length) return; stopEditing(true); S.redo.push(base); restore(S.undo.pop()); }
 function redo() { if (!S.redo.length) return; S.undo.push(base); restore(S.redo.pop()); }
-function updUndo() { $("#bUndo").disabled = !S.undo.length; $("#bRedo").disabled = !S.redo.length; }
+function updUndo() { $("#bUndo").disabled = !S.undo.length; $("#bRedo").disabled = !S.redo.length; updDocLabel(); }
 
 /* ---------- toast / busy ---------- */
 let toastT;
@@ -199,9 +214,15 @@ function renderAll(keepScroll = true) {
     viewer.append(n);
   }
   if (!S.pages.length) {
-    viewer.insertAdjacentHTML("beforeend", '<div class="empty"><div class="empty-card"><h2>Arrastra aquí tus PDF o imágenes</h2><p>Todo se procesa en tu navegador. Tus archivos no se suben a ningún servidor.</p></div></div>');
-    const b = el("button", "btn primary", "Elegir archivos"); b.onclick = () => pickFiles("open");
-    viewer.querySelector(".empty-card").append(b);
+    const box = el("div", "empty"), card = el("div", "empty-card");
+    card.append(el("h2", null, "Abre un PDF para empezar"),
+      el("p", null, "También puedes arrastrar aquí tus PDF o imágenes. Todo se procesa en tu navegador: tus archivos no se suben a ningún servidor."));
+    const row = el("div", "row"); row.style.justifyContent = "center";
+    const b1 = el("button", "btn primary", "Abrir PDF"); b1.onclick = () => pickFiles("open");
+    const b2 = el("button", "btn", "Documento en blanco"); b2.onclick = () => newDoc();
+    row.append(b1, b2);
+    const b3 = el("button", "linkbtn", "Ver un documento de ejemplo"); b3.onclick = () => loadSample();
+    card.append(row, b3); box.append(card); viewer.append(box);
   }
   S.pages.forEach((p, i) => {
     const d = disp(p);
@@ -216,7 +237,7 @@ function renderAll(keepScroll = true) {
     io.observe(wrap);
   });
   if (keepScroll) viewer.scrollTop = ratio * viewer.scrollHeight;
-  renderThumbs(); updateStatus(); renderProps(true);
+  renderThumbs(); updateStatus(); renderProps(true); updateEnabled(); updDocLabel();
 }
 function layerOf(pid) { return viewer.querySelector(`.pg[data-id="${pid}"] .layer`); }
 
@@ -792,12 +813,15 @@ $("#bAppend").onclick = () => pickFiles(S.pages.length && !S.sample ? "append" :
 $("#fileIn").addEventListener("change", async e => {
   const files = [...e.target.files]; e.target.value = ""; if (files.length) await handleFiles(files, pickMode);
 });
-async function handleFiles(files, mode) {
+async function handleFiles(files, mode, force) {
+  if (mode === "open" && !force && isDirty()) { guardDirty(() => handleFiles(files, mode, true)); return; }
   stopEditing(true);
   const pdfFirst = files.find(f => /\.pdf$/i.test(f.name)) || files[0];
+  const oldSources = mode === "open" ? new Set(S.sources.keys()) : null;
   const pages = await busy(files.length > 1 ? `Abriendo ${files.length} archivos…` : "Abriendo…", () => filesToPages(files));
   if (!pages.length) return;
   if (mode === "open") {
+    S.pages = []; freeSources(oldSources);
     S.pages = pages; S.sample = false; S.checked.clear(); S.sel = null; S.cur = pages[0].id;
     S.docName = pdfFirst.name.replace(/\.[^.]+$/, "") || "documento";
     resetHistory(); renderAll(false); viewer.scrollTop = 0; fitWidth();
@@ -808,6 +832,51 @@ async function handleFiles(files, mode) {
     toast(`Se agregaron ${pages.length} página${pages.length > 1 ? "s" : ""}.`);
   }
 }
+/* ---------- document lifecycle: new / close ---------- */
+function freeSources(ids) {
+  for (const id of ids) {
+    const s = S.sources.get(id); if (!s) continue;
+    try { s.pdf.destroy(); } catch { }
+    S.sources.delete(id);
+    for (const m of [pjsCache, dims, thumbCache]) for (const k of [...m.keys()]) if (k.startsWith(id + ":")) m.delete(k);
+    if (blankSrc === id) blankSrc = null;
+  }
+  for (const k of [...bmpCache.keys()]) if (!S.sources.has(k.split(":")[0])) bmpCache.delete(k);
+  for (const im of S.images.values()) if (im.url && im.url.startsWith("blob:")) URL.revokeObjectURL(im.url);
+  S.images.clear();
+}
+function clearDoc() {
+  stopEditing(false);
+  S.pages = []; S.sel = null; S.cur = null; S.checked.clear(); S.sample = false; S.docName = "documento";
+  freeSources([...S.sources.keys()]);
+}
+function guardDirty(action) {
+  if (!isDirty()) return action();
+  stopEditing(true);
+  const body = el("p"); body.style.margin = "0";
+  body.append("Tienes cambios sin guardar en ", el("b", null, S.docName + ".pdf"), ". Si continúas sin guardar, se perderán.");
+  modal("¿Guardar los cambios?", body, [
+    { label: "Cancelar", fn: c => c() },
+    { label: "No guardar", fn: c => { c(); action(); } },
+    { label: "Guardar", primary: true, fn: async c => { c(); if (await exportPages(S.pages, `${S.docName}-editado.pdf`)) action(); } }
+  ]);
+}
+function closeDoc() {
+  if (!S.pages.length) return;
+  guardDirty(() => { clearDoc(); resetHistory(); renderAll(false); toast("Documento cerrado."); });
+}
+function newDoc() {
+  guardDirty(async () => {
+    clearDoc();
+    S.pages = await blankPages(1, "a4"); S.cur = S.pages[0].id; S.docName = "documento-nuevo";
+    resetHistory(); renderAll(false); fitWidth();
+    toast("Documento en blanco listo. Agrega texto, firmas o más páginas.");
+  });
+}
+$("#bNew").onclick = newDoc;
+$("#bClose").onclick = closeDoc;
+window.addEventListener("beforeunload", e => { if (isDirty()) { e.preventDefault(); e.returnValue = ""; } });
+
 /* drag & drop files */
 let dragDepth = 0;
 const isFileDrag = e => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
@@ -882,22 +951,26 @@ async function saveFile(name, data, mime) {
   const blob = new Blob([data], { type: mime });
   const dl = await dlPromise;
   if (dl) {
-    try { await dl.save({ filename: name, data: blob }); toast(`Guardado: ${name}`); return; }
+    try { await dl.save({ filename: name, data: blob }); toast(`Guardado: ${name}`); return true; }
     catch (e) {
-      if (e && e.code === "declined") { toast("Descarga cancelada."); return; }
-      if (e && e.code === "rate_limited") { toast("Ya hay una descarga esperando tu confirmación.", { err: true }); return; }
+      if (e && e.code === "declined") { toast("Descarga cancelada."); return false; }
+      if (e && e.code === "rate_limited") { toast("Ya hay una descarga esperando tu confirmación.", { err: true }); return false; }
     }
   }
   const url = URL.createObjectURL(blob), a = el("a"); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
   toast(`Descargando ${name}`);
+  return true;
 }
 async function exportPages(list, name) {
   stopEditing(true);
   try {
+    const state = base;
     const bytes = await busy("Generando PDF…", () => buildPdf(list));
-    await saveFile(name, bytes, "application/pdf");
-  } catch (e) { console.error(e); toast("No se pudo generar el PDF: " + (e.message || e), { err: true, ms: 7000 }); }
+    const ok = await saveFile(name, bytes, "application/pdf");
+    if (ok && list === S.pages) { savedBase = state; updDocLabel(); }
+    return ok;
+  } catch (e) { console.error(e); toast("No se pudo generar el PDF: " + (e.message || e), { err: true, ms: 7000 }); return false; }
 }
 $("#bSave").onclick = () => { if (!S.pages.length) return toast("No hay nada que guardar todavía."); exportPages(S.pages, `${S.docName}${S.sample ? "" : "-editado"}.pdf`); };
 
@@ -1151,16 +1224,20 @@ async function makeSample() {
   }
   return { bytes: await doc.save(), hl };
 }
-(async () => {
-  try {
-    const { bytes, hl } = await makeSample();
-    S.pages = await addSource(bytes, "ejemplo.pdf");
-    const p1 = S.pages[0];
-    p1.annots.push({ id: uid("a"), type: "rect", mode: "hl", color: "#ffe14d", ...hl });
-    S.cur = p1.id; S.sample = true; S.docName = "ejemplo";
-    resetHistory(); renderAll(false); fitWidth();
-  } catch (e) { console.error(e); renderAll(false); }
-})();
+function loadSample() {
+  guardDirty(async () => {
+    try {
+      clearDoc();
+      const { bytes, hl } = await makeSample();
+      S.pages = await addSource(bytes, "ejemplo.pdf");
+      const p1 = S.pages[0];
+      p1.annots.push({ id: uid("a"), type: "rect", mode: "hl", color: "#ffe14d", ...hl });
+      S.cur = p1.id; S.sample = true; S.docName = "ejemplo";
+      resetHistory(); renderAll(false); fitWidth();
+    } catch (e) { console.error(e); toast("No se pudo crear el ejemplo.", { err: true }); renderAll(false); }
+  });
+}
+resetHistory(); renderAll(false);
 setTool("select");
 updUndo();
 })();
