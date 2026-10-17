@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Editor de PDF gratuito y de código abierto que funciona en tu navegador.">
+<title>Editor de PDF</title>
+<script src="js/config.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Caveat:wght@600&family=Dancing+Script:wght@600&family=Great+Vibes&display=swap">
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="top">
+    <div class="brand"><div class="brand-mark" aria-hidden="true"></div><h1 id="appName"></h1></div>
+    <div class="grp">
+      <button class="btn" id="bOpen" title="Abrir PDF o imágenes (reemplaza lo actual)"><svg viewBox="0 0 24 24"><path d="M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 18V9a1.5 1.5 0 0 0-1.5-1.5h-8l-2-2.5h-5A1.5 1.5 0 0 0 3 6.5z"/></svg><span class="lbl">Abrir</span></button>
+      <button class="btn" id="bAppend" title="Añadir otros PDF o imágenes al final (fusionar)"><svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M13 12v6M10 15h6"/></svg><span class="lbl">Fusionar / añadir</span></button>
+      <button class="btn primary" id="bSave" title="Guardar el PDF con todos los cambios"><svg viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg><span class="lbl">Guardar PDF</span></button>
+    </div>
+    <div class="spacer"></div>
+    <div class="grp">
+      <button class="icon-btn" id="bUndo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button class="icon-btn" id="bRedo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+      <div class="vsep"></div>
+      <button class="icon-btn" id="bZoomOut" title="Alejar" aria-label="Alejar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4M8.5 11h5"/></svg></button>
+      <span class="zoomval" id="zoomVal">100%</span>
+      <button class="icon-btn" id="bZoomIn" title="Acercar" aria-label="Acercar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4M8.5 11h5M11 8.5v5"/></svg></button>
+      <button class="icon-btn" id="bFit" title="Ajustar al ancho" aria-label="Ajustar al ancho"><svg viewBox="0 0 24 24"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/></svg></button>
+    </div>
+  </div>
+
+  <div class="toolrow">
+    <div class="tools" role="toolbar" aria-label="Herramientas">
+      <button class="tool" data-tool="select" aria-pressed="true" title="Seleccionar y mover (V)"><svg viewBox="0 0 24 24"><path d="M6 3.5 18 11l-5.5 1.6L10 18z"/></svg><span>Mover</span></button>
+      <button class="tool" data-tool="text" aria-pressed="false" title="Agregar texto (T)"><svg viewBox="0 0 24 24"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg><span>Texto</span></button>
+      <button class="tool" data-act="sign" title="Agregar firma"><svg viewBox="0 0 24 24"><path d="M3 20c2.5-.5 3.5-2.5 5.5-2.5S10 19.5 12 19.5s2.5-2 4.5-2 2 1 3.5 1"/><path d="m14.5 3.5 3 3L9 15H6v-3z"/></svg><span>Firma</span></button>
+      <button class="tool" data-act="image" title="Agregar imagen o logo"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="m21 16-5-5-8 8"/></svg><span>Imagen</span></button>
+      <div class="vsep"></div>
+      <button class="tool" data-tool="highlight" aria-pressed="false" title="Resaltar (H)"><svg viewBox="0 0 24 24"><path d="m9 14 7-7 3 3-7 7H9z"/><path d="M4 21h8"/></svg><span>Resaltar</span></button>
+      <button class="tool" data-tool="whiteout" aria-pressed="false" title="Tapar texto o zonas (corrector)"><svg viewBox="0 0 24 24"><rect x="3.5" y="7" width="17" height="10" rx="1.5"/><path d="M7 12h10" stroke-dasharray="2 2"/></svg><span>Tapar</span></button>
+      <button class="tool" data-tool="draw" aria-pressed="false" title="Dibujar a mano alzada (D)"><svg viewBox="0 0 24 24"><path d="M3 17c3-6 5-10 7-10s1 8 4 8 3-5 7-6"/></svg><span>Dibujar</span></button>
+    </div>
+    <div class="vsep"></div>
+    <div class="props" id="props"></div>
+  </div>
+
+  <div class="work">
+    <aside class="side" aria-label="Páginas">
+      <div class="side-head">
+        <div class="side-title"><b>PÁGINAS</b><span id="pageCount">0</span></div>
+        <div class="page-actions">
+          <button class="icon-btn" id="pRotL" title="Girar a la izquierda" aria-label="Girar a la izquierda"><svg viewBox="0 0 24 24"><path d="M4 4v5h5"/><path d="M4.5 9A8 8 0 1 1 6 17"/></svg></button>
+          <button class="icon-btn" id="pRotR" title="Girar a la derecha" aria-label="Girar a la derecha"><svg viewBox="0 0 24 24"><path d="M20 4v5h-5"/><path d="M19.5 9A8 8 0 1 0 18 17"/></svg></button>
+          <button class="icon-btn" id="pDup" title="Duplicar página" aria-label="Duplicar página"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="1.5"/><path d="M16 8V4.5A1.5 1.5 0 0 0 14.5 3h-9A1.5 1.5 0 0 0 4 4.5v11A1.5 1.5 0 0 0 5.5 17H8"/></svg></button>
+          <button class="icon-btn" id="pDel" title="Eliminar página" aria-label="Eliminar página"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+          <button class="icon-btn" id="pBlank" title="Insertar página en blanco después" aria-label="Insertar página en blanco"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M12 10v7M8.5 13.5h7"/></svg></button>
+          <button class="icon-btn" id="pInsert" title="Insertar PDF o imagen después de esta página" aria-label="Insertar archivo"><svg viewBox="0 0 24 24"><path d="M12 3v11m-4-4 4 4 4-4"/><path d="M4 15v4.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg></button>
+          <button class="icon-btn" id="pExtract" title="Extraer páginas marcadas a un PDF nuevo" aria-label="Extraer páginas"><svg viewBox="0 0 24 24"><path d="M14 3h7v7M21 3l-9 9"/><path d="M19 14v5.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 3 19.5v-13A1.5 1.5 0 0 1 4.5 5H10"/></svg></button>
+          <button class="icon-btn" id="pSplit" title="Dividir PDF" aria-label="Dividir PDF"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.6 7.5 20 18M8.6 16.5 20 6"/></svg></button>
+        </div>
+        <div class="target-note" id="targetNote"></div>
+      </div>
+      <div class="thumbs" id="thumbs"></div>
+    </aside>
+    <section class="viewer" id="viewer" data-tool="select" aria-label="Documento"></section>
+  </div>
+
+  <div class="status" id="status"></div>
+</div>
+
+<input type="file" id="fileIn" accept="application/pdf,.pdf,image/png,image/jpeg,image/webp,image/gif,image/bmp" multiple hidden>
+<input type="file" id="imgIn" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" hidden>
+
+<!-- Librerías: primero la copia local (npm install), si no existe se usa el CDN -->
+<script src="vendor/pdf.min.js"></script>
+<script>window.pdfjsLib || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"><\/script>')</script>
+<script src="vendor/pdf.worker.min.js"></script>
+<script>window.pdfjsWorker || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"><\/script>')</script>
+<script src="vendor/pdf-lib.min.js"></script>
+<script>window.PDFLib || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"><\/script>')</script>
+<script src="vendor/jszip.min.js"></script>
+<script>window.JSZip || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"><\/script>')</script>
+<script src="js/app.js"></script>
+</body>
+</html>
