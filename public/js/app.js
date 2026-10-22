@@ -113,7 +113,7 @@ async function addSource(bytes, name) {
   for (let i = 0; i < pdf.numPages; i++) {
     const pg = await getPjs(id, i);
     const vp = pg.getViewport({ scale: 1, rotation: 0 });
-    dims.set(id + ":" + i, { w: vp.width, h: vp.height, r0: pg.rotate || 0, view: pg.view });
+    dims.set(id + ":" + i, { w: vp.width, h: vp.height, r0: pg.rotate || 0, pg });
     out.push({ id: uid("p"), src: id, idx: i, rot: 0, annots: [] });
   }
   return out;
@@ -777,7 +777,7 @@ $("#imgIn").addEventListener("change", async e => {
 /* ---------- edit existing text (digital PDFs) ---------- */
 function vpOf(p, scale = 1, rotation) {
   const d = dims.get(p.src + ":" + p.idx);
-  return new pdfjsLib.PageViewport({ viewBox: d.view, scale, rotation: rotation == null ? disp(p).r : rotation });
+  return d.pg.getViewport({ scale, rotation: rotation == null ? disp(p).r : rotation });
 }
 function dispBox(vp, r) {
   const pts = [[r[0], r[1]], [r[2], r[1]], [r[0], r[3]], [r[2], r[3]]].map(([x, y]) => vp.convertToViewportPoint(x, y));
@@ -1034,8 +1034,10 @@ async function runOcr(p) {
     renderProps(true);
     toast(found ? `Se reconocieron ${found} línea${found > 1 ? "s" : ""}. Haz clic en una para editarla.` : "No se encontró texto legible en esta página.");
   } catch (e) {
-    console.error(e); ocrWorker = null;
-    toast("No se pudo cargar el reconocimiento de texto. Revisa tu conexión a internet o usa la versión instalada (npm install).", { err: true, ms: 8000 });
+    console.error("[OCR]", e); ocrWorker = null;
+    const local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) || /github\.io$/.test(location.hostname);
+    toast(local ? "No se pudo iniciar el reconocimiento de texto. Revisa tu conexión a internet y vuelve a intentarlo."
+      : "El reconocimiento de texto no está disponible en esta vista. Funciona en la versión instalada (npm start), en la de escritorio o en GitHub Pages.", { err: true, ms: 9000 });
   } finally { ocrProgress = null; }
 }
 
