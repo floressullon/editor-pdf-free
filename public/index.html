@@ -39,6 +39,7 @@
   <div class="toolrow">
     <div class="tools" role="toolbar" aria-label="Herramientas">
       <button class="tool" data-tool="select" aria-pressed="true" title="Seleccionar y mover (V)"><svg viewBox="0 0 24 24"><path d="M6 3.5 18 11l-5.5 1.6L10 18z"/></svg><span>Mover</span></button>
+      <button class="tool" data-tool="edittext" aria-pressed="false" title="Editar o borrar el texto que ya tiene el PDF (E)"><svg viewBox="0 0 24 24"><path d="M4 6h9M4 10h6M4 14h5"/><path d="m13.5 19.5 1-3.5 5.5-5.5 2.5 2.5-5.5 5.5z"/></svg><span>Editar texto</span></button>
       <button class="tool" data-tool="text" aria-pressed="false" title="Agregar texto (T)"><svg viewBox="0 0 24 24"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg><span>Texto</span></button>
       <button class="tool" data-act="sign" title="Agregar firma"><svg viewBox="0 0 24 24"><path d="M3 20c2.5-.5 3.5-2.5 5.5-2.5S10 19.5 12 19.5s2.5-2 4.5-2 2 1 3.5 1"/><path d="m14.5 3.5 3 3L9 15H6v-3z"/></svg><span>Firma</span></button>
       <button class="tool" data-act="image" title="Agregar imagen o logo"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="m21 16-5-5-8 8"/></svg><span>Imagen</span></button>
@@ -87,6 +88,7 @@
 <script>window.PDFLib || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"><\/script>')</script>
 <script src="vendor/jszip.min.js"></script>
 <script>window.JSZip || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"><\/script>')</script>
+<script src="js/pdf-text-remover.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

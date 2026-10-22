@@ -121,6 +121,16 @@ button,input,select{font:inherit;color:inherit}
   font:600 11px/19px "IBM Plex Sans",system-ui,sans-serif;font-style:normal;font-weight:600;letter-spacing:.02em;white-space:nowrap;cursor:move;user-select:none;touch-action:none}
 .an-move::before{content:"";position:absolute;left:6px;top:5px;width:6px;height:9px;background:radial-gradient(circle,#fff 1px,transparent 1.3px) 0 0/3px 3px}
 .an-move.below{bottom:auto;top:calc(100% + 5px)}
+.tl{position:absolute;border-radius:2px;cursor:text;background:color-mix(in srgb,var(--sel) 5%,transparent)}
+.tl:hover{background:color-mix(in srgb,var(--sel) 14%,transparent);outline:1.5px dashed var(--sel);outline-offset:1px}
+.tl.ocr{background:color-mix(in srgb,#1f7a4d 7%,transparent)}
+.an-textedit{cursor:text}
+.an-textedit .te-in{position:absolute;transform-origin:50% 50%}
+.an-textedit .an-tx{position:absolute;white-space:pre;line-height:1.2;min-width:4px}
+.an-textedit .an-tx:empty::before{content:""}
+.an-textedit.editing .an-tx:empty::before{content:"Línea borrada";color:#8a91a3;font-style:italic}
+.an-textedit.editing{outline:1.5px solid var(--sel);outline-offset:2px}
+.an-textedit.editing .an-tx{cursor:text}
 .an-image img{width:100%;height:100%;display:block;pointer-events:none;user-select:none;-webkit-user-drag:none}
 .an-rect.hl{mix-blend-mode:multiply}
 .an-ink svg{display:block;overflow:visible;pointer-events:none}

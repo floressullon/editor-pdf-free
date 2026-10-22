@@ -2,8 +2,19 @@
 const { app, BrowserWindow, shell, dialog } = require("electron");
 const path = require("path");
 const config = require("../public/js/config.js");
+const { startServer } = require("../scripts/serve.js");
 
-function createWindow() {
+// El editor se sirve desde un servidor local privado (solo esta computadora),
+// así el OCR y los workers funcionan igual que en la versión web.
+let serverUrl = null;
+async function getServerUrl() {
+  if (serverUrl) return serverUrl;
+  const server = await startServer(0);
+  serverUrl = `http://127.0.0.1:${server.address().port}/`;
+  return serverUrl;
+}
+
+async function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -15,7 +26,7 @@ function createWindow() {
     backgroundColor: "#e6e9ef",
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
-  win.loadFile(path.join(__dirname, "..", "public", "index.html"));
+  win.loadURL(await getServerUrl());
 
   // Si hay cambios sin guardar, preguntar antes de cerrar la ventana.
   win.webContents.on("will-prevent-unload", event => {

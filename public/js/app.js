@@ -36,14 +36,15 @@ const S = {
   zoom: 1, tool: "select", cur: null, sel: null, editing: null,
   checked: new Set(), undo: [], redo: [], sample: false, docName: "documento"
 };
-const D = { font: "Helvetica", size: 11, color: "#111111", bold: false, hlColor: "#ffe14d", woColor: "#ffffff", inkColor: "#1f3a93", inkWidth: 2 };
+const D = { font: "Helvetica", size: 11, color: "#111111", bold: false, italic: false, hlColor: "#ffe14d", woColor: "#ffffff", inkColor: "#1f3a93", inkWidth: 2 };
 const FONTS = {
-  Helvetica: { label: "Arial", css: 'Arial, Helvetica, "Liberation Sans", Arimo, sans-serif', base: 0.947, std: ["Helvetica", "HelveticaBold"] },
-  Times: { label: "Times New Roman", css: '"Times New Roman", Times, "Liberation Serif", serif', base: 0.9375, std: ["TimesRoman", "TimesRomanBold"] },
-  Courier: { label: "Courier New", css: '"Courier New", Courier, "Liberation Mono", monospace', base: 0.866, std: ["Courier", "CourierBold"] }
+  Helvetica: { label: "Arial", css: 'Arial, Helvetica, "Liberation Sans", Arimo, sans-serif', base: 0.947, std: ["Helvetica", "HelveticaBold", "HelveticaOblique", "HelveticaBoldOblique"] },
+  Times: { label: "Times New Roman", css: '"Times New Roman", Times, "Liberation Serif", serif', base: 0.9375, std: ["TimesRoman", "TimesRomanBold", "TimesRomanItalic", "TimesRomanBoldItalic"] },
+  Courier: { label: "Courier New", css: '"Courier New", Courier, "Liberation Mono", monospace', base: 0.866, std: ["Courier", "CourierBold", "CourierOblique", "CourierBoldOblique"] }
 };
 
 const pjsCache = new Map(), dims = new Map(), thumbCache = new Map(), bmpCache = new Map();
+const lineCache = new Map(), lineReady = new Map(), sampleCache = new Map();
 const pageById = id => S.pages.find(p => p.id === id);
 const pageIndex = id => S.pages.findIndex(p => p.id === id);
 
@@ -85,9 +86,9 @@ function toast(msg, opts = {}) {
   document.body.append(t); clearTimeout(toastT); toastT = setTimeout(() => t.remove(), opts.ms || 3800);
 }
 async function busy(msg, fn) {
-  const b = el("div", "busy"); b.append(el("div", null, msg)); document.body.append(b);
+  const b = el("div", "busy"), t = el("div", null, msg); b.append(t); document.body.append(b);
   await new Promise(r => setTimeout(r, 30));
-  try { return await fn(); } finally { b.remove(); }
+  try { return await fn(m => { t.textContent = m; }); } finally { b.remove(); }
 }
 
 /* ---------- sources ---------- */
@@ -112,7 +113,7 @@ async function addSource(bytes, name) {
   for (let i = 0; i < pdf.numPages; i++) {
     const pg = await getPjs(id, i);
     const vp = pg.getViewport({ scale: 1, rotation: 0 });
-    dims.set(id + ":" + i, { w: vp.width, h: vp.height, r0: pg.rotate || 0 });
+    dims.set(id + ":" + i, { w: vp.width, h: vp.height, r0: pg.rotate || 0, view: pg.view });
     out.push({ id: uid("p"), src: id, idx: i, rot: 0, annots: [] });
   }
   return out;
@@ -244,6 +245,7 @@ function layerOf(pid) { return viewer.querySelector(`.pg[data-id="${pid}"] .laye
 function renderLayer(p, layer) {
   layer = layer || layerOf(p.id); if (!layer) return;
   layer.innerHTML = "";
+  if (S.tool === "edittext") addLineBoxes(p, layer);
   for (const a of p.annots) layer.append(annotEl(a, p));
 }
 function annotEl(a, p) {
@@ -252,7 +254,16 @@ function annotEl(a, p) {
   if (a.type === "text") {
     const f = FONTS[a.font] || FONTS.Helvetica;
     const tx = el("div", "an-tx"); tx.textContent = a.text; e.append(tx);
-    Object.assign(e.style, { left: a.x * z + "px", top: a.y * z + "px", fontFamily: f.css, fontSize: a.size * z + "px", color: a.color, fontWeight: a.bold ? "700" : "400" });
+    Object.assign(e.style, { left: a.x * z + "px", top: a.y * z + "px", fontFamily: f.css, fontSize: a.size * z + "px", color: a.color, fontWeight: a.bold ? "700" : "400", fontStyle: a.italic ? "italic" : "normal" });
+  } else if (a.type === "textedit") {
+    const vp = vpOf(p), [x0, y0, x1, y1] = a.rect, b = dispBox(vp, a.rect), R = disp(p).r;
+    const W = (x1 - x0) * z, H = (y1 - y0) * z, f = FONTS[a.font] || FONTS.Helvetica;
+    Object.assign(e.style, { left: b.x * z + "px", top: b.y * z + "px", width: b.w * z + "px", height: b.h * z + "px" });
+    const inn = el("div", "te-in");
+    Object.assign(inn.style, { width: W + "px", height: H + "px", left: (b.w * z - W) / 2 + "px", top: (b.h * z - H) / 2 + "px", background: a.bg, transform: R ? `rotate(${R}deg)` : "" });
+    const tx = el("div", "an-tx"); tx.textContent = a.text;
+    Object.assign(tx.style, { left: (a.bx - x0) * z + "px", top: ((y1 - a.by) - a.size * f.base) * z + "px", fontFamily: f.css, fontSize: a.size * z + "px", color: a.color, fontWeight: a.bold ? "700" : "400", fontStyle: a.italic ? "italic" : "normal" });
+    inn.append(tx); e.append(inn);
   } else if (a.type === "image") {
     const im = S.images.get(a.img); const i = el("img"); i.alt = ""; i.draggable = false; if (im) i.src = im.url; e.append(i);
     Object.assign(e.style, { left: a.x * z + "px", top: a.y * z + "px", width: a.w * z + "px", height: a.h * z + "px" });
@@ -267,8 +278,8 @@ function annotEl(a, p) {
   if (S.sel && S.sel.aid === a.id) {
     e.classList.add("sel");
     if (a.type === "text") { const mv = el("div", "an-move" + (a.y * z < 26 ? " below" : ""), "Mover"); mv.title = "Arrastra para mover el texto"; e.append(mv); }
-    if (a.type !== "ink") { const h = el("div", "an-h"); h.title = "Cambiar tamaño"; e.append(h); }
-    const x = el("button", "an-x", "×"); x.title = "Eliminar"; x.setAttribute("aria-label", "Eliminar"); e.append(x);
+    if (a.type !== "ink" && a.type !== "textedit") { const h = el("div", "an-h"); h.title = "Cambiar tamaño"; e.append(h); }
+    const x = el("button", "an-x", "×"); x.title = a.type === "textedit" ? "Restaurar el texto original" : "Eliminar"; x.setAttribute("aria-label", x.title); e.append(x);
   }
   return e;
 }
@@ -413,7 +424,7 @@ function updateStatus() {
   if (!S.pages.length) { st.append(el("span", "hint", "Sin documento abierto")); return; }
   const p = pageById(S.cur) || S.pages[0];
   st.append(el("span", null, `Página ${pageIndex(p.id) + 1} de ${S.pages.length}`), el("span", null, sizeName(p)), el("span", null, `Zoom ${Math.round(S.zoom * 100)}%`));
-  const hints = { select: "Arrastra para mover · doble clic en un texto para editarlo · Supr para borrar", text: "Clic en la página para escribir · arrastra un texto (o su pestaña Mover) para cambiarlo de lugar", highlight: "Arrastra sobre el texto que quieres resaltar", whiteout: "Arrastra para tapar una zona; luego puedes escribir encima con Texto", draw: "Dibuja con el mouse o con el dedo" };
+  const hints = { select: "Arrastra para mover · doble clic en un texto para editarlo · Supr para borrar", text: "Clic en la página para escribir · arrastra un texto (o su pestaña Mover) para cambiarlo de lugar", highlight: "Arrastra sobre el texto que quieres resaltar", whiteout: "Arrastra para tapar una zona; luego puedes escribir encima con Texto", draw: "Dibuja con el mouse o con el dedo", edittext: "Clic en una línea para corregirla · deja el texto vacío para borrarla · la × restaura el original" };
   st.append(el("span", "hint", hints[S.tool] || ""));
   $("#zoomVal").textContent = Math.round(S.zoom * 100) + "%";
 }
@@ -436,9 +447,10 @@ document.querySelectorAll(".tool").forEach(b => b.addEventListener("click", () =
   else if (b.dataset.act === "image") { if (!S.pages.length) return toast("Primero abre un PDF."); $("#imgIn").click(); }
 }));
 function setTool(t) {
-  stopEditing(true); S.tool = t; viewer.dataset.tool = t;
+  stopEditing(true); const prev = S.tool; S.tool = t; viewer.dataset.tool = t;
   document.querySelectorAll(".tool[data-tool]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.tool === t)));
   if (t !== "select" && S.sel) { const p = pageById(S.sel.pid); S.sel = null; p && renderLayer(p); }
+  if ((t === "edittext") !== (prev === "edittext")) S.pages.forEach(p => renderLayer(p));
   renderProps(); updateStatus();
 }
 function selAnnot() { if (!S.sel) return null; const p = pageById(S.sel.pid); const a = p && p.annots.find(x => x.id === S.sel.aid); return a ? { p, a } : null; }
@@ -455,29 +467,47 @@ function renderProps(force) {
   const box = $("#props");
   const s = selAnnot();
   const kind = s ? (s.a.type === "rect" ? (s.a.mode === "hl" ? "highlight" : "whiteout") : s.a.type === "ink" ? "draw" : s.a.type) : S.tool;
-  const key = kind + "|" + (s ? s.a.id : "") + "|" + S.pages.length;
+  const curLines = S.cur && pageById(S.cur) ? lineReady.get(pageById(S.cur).src + ":" + pageById(S.cur).idx) : null;
+  const key = kind + "|" + (s ? s.a.id : "") + "|" + S.pages.length + "|" + (kind === "edittext" ? S.cur + ":" + (curLines ? curLines.length : "?") : "");
   if (!force && key === propsKey) return;
   propsKey = key; box.innerHTML = "";
   const src = s ? s.a : null;
   const upd = (fn) => { const cs = selAnnot(); if (cs) { fn(cs.a); renderLayer(cs.p); if (S.editing) reEdit(); commit(); } };
   const color = (val, onch) => { const i = el("input"); i.type = "color"; i.value = val; i.oninput = () => onch(i.value); return i; };
   const lab = (t, ctrl) => { const l = el("label"); l.append(el("span", null, t), ctrl); return l; };
-  if (kind === "text") {
+  if (kind === "text" || kind === "textedit") {
     const sel = el("select"); sel.setAttribute("aria-label", "Fuente");
     for (const [k, f] of Object.entries(FONTS)) { const o = el("option", null, f.label); o.value = k; sel.append(o); }
     sel.value = src ? src.font : D.font;
-    sel.onchange = () => { D.font = sel.value; upd(a => a.font = sel.value); };
-    const sz = el("input"); sz.type = "number"; sz.min = 4; sz.max = 144; sz.step = 1; sz.value = src ? src.size : D.size; sz.setAttribute("aria-label", "Tamaño");
-    sz.onchange = () => { const v = Math.max(4, Math.min(144, +sz.value || 12)); D.size = v; upd(a => a.size = v); };
+    sel.onchange = () => { if (!s || s.a.type === "text") D.font = sel.value; upd(a => a.font = sel.value); };
+    const sz = el("input"); sz.type = "number"; sz.min = 4; sz.max = 144; sz.step = 0.5; sz.value = src ? src.size : D.size; sz.setAttribute("aria-label", "Tamaño");
+    sz.onchange = () => { const v = Math.max(4, Math.min(144, Math.round((+sz.value || 12) * 10) / 10)); if (!s || s.a.type === "text") D.size = v; upd(a => a.size = v); };
     const bold = el("button", "toggle", "B"); bold.title = "Negrita"; bold.setAttribute("aria-pressed", String(src ? src.bold : D.bold));
-    bold.onclick = () => { const v = bold.getAttribute("aria-pressed") !== "true"; bold.setAttribute("aria-pressed", String(v)); D.bold = v; upd(a => a.bold = v); };
-    box.append(sel, lab("pt", sz), bold, color(src ? src.color : D.color, v => { D.color = v; upd(a => a.color = v); }));
-    if (s) { const b = el("button", "btn", "Editar texto"); b.style.height = "30px"; b.onclick = () => startEditing(s.p, s.a); box.append(b); }
+    bold.onclick = () => { const v = bold.getAttribute("aria-pressed") !== "true"; bold.setAttribute("aria-pressed", String(v)); if (!s || s.a.type === "text") D.bold = v; upd(a => a.bold = v); };
+    const ital = el("button", "toggle", "I"); ital.style.fontStyle = "italic"; ital.title = "Cursiva"; ital.setAttribute("aria-pressed", String(src ? !!src.italic : D.italic));
+    ital.onclick = () => { const v = ital.getAttribute("aria-pressed") !== "true"; ital.setAttribute("aria-pressed", String(v)); if (!s || s.a.type === "text") D.italic = v; upd(a => a.italic = v); };
+    box.append(sel, lab("pt", sz), bold, ital, color(src ? src.color : D.color, v => { if (!s || s.a.type === "text") D.color = v; upd(a => a.color = v); }));
+    if (s && s.a.type === "text") { const b = el("button", "btn", "Editar texto"); b.style.height = "30px"; b.onclick = () => startEditing(s.p, s.a); box.append(b); }
+    if (s && s.a.type === "textedit") {
+      const er = el("button", "btn danger", "Borrar línea"); er.style.height = "30px"; er.title = "Quita esta línea del documento";
+      er.onclick = () => { const cs = selAnnot(); if (!cs) return; S.editing = null; cs.a.text = ""; renderLayer(cs.p); commit(); startEditing(cs.p, cs.a); };
+      const rs = el("button", "btn", "Restaurar original"); rs.style.height = "30px"; rs.onclick = () => deleteAnnot(s.p.id, s.a.id);
+      box.append(er, rs);
+      if (s.a.fl) { const o = el("span", "small", `Original: ${s.a.fl} · ${s.a.o.size} pt`); o.title = "Fuente detectada en el PDF. Se usa la más parecida disponible."; box.append(o); }
+    }
+  } else if (kind === "edittext") {
+    const msg = curLines && !curLines.length
+      ? "Esta página no tiene texto seleccionable. Si es un escaneo, usa Reconocer texto."
+      : "Haz clic en una línea del documento para corregirla o borrarla.";
+    box.append(el("span", null, msg));
+    const ob = el("button", "btn", "Reconocer texto (OCR)"); ob.style.height = "30px"; ob.title = "Detecta el texto de una página escaneada para poder editarlo";
+    ob.onclick = () => { const p = pageById(S.cur); if (p) runOcr(p); };
+    box.append(ob);
   } else if (kind === "highlight") {
     box.append(lab("Color", color(src ? src.color : D.hlColor, v => { D.hlColor = v; upd(a => a.color = v); })));
   } else if (kind === "whiteout") {
     box.append(lab("Relleno", color(src ? src.color : D.woColor, v => { D.woColor = v; upd(a => a.color = v); })));
-    if (!s) box.append(el("span", null, "Consejo: tapa el texto viejo y luego escribe el nuevo encima."));
+    if (!s) box.append(el("span", null, "Consejo: para corregir el texto del PDF usa Editar texto."));
   } else if (kind === "draw") {
     const r = el("input"); r.type = "range"; r.min = 0.5; r.max = 12; r.step = 0.5; r.value = src ? src.width : D.inkWidth; r.setAttribute("aria-label", "Grosor");
     r.oninput = () => { D.inkWidth = +r.value; upd(a => a.width = +r.value); };
@@ -487,7 +517,7 @@ function renderProps(force) {
   } else {
     box.append(el("span", null, S.pages.length ? "Elige una herramienta para editar, o selecciona un elemento que ya agregaste." : "Abre un PDF para empezar."));
   }
-  if (s) {
+  if (s && s.a.type !== "textedit") {
     const dup = el("button", "btn", "Duplicar"); dup.style.height = "30px"; dup.onclick = () => duplicateAnnot(s.p, s.a);
     const del = el("button", "btn danger", "Eliminar"); del.style.height = "30px"; del.onclick = () => deleteAnnot(s.p.id, s.a.id);
     box.append(dup, del);
@@ -528,7 +558,8 @@ function stopEditing(save) {
   const { pid, aid } = S.editing; S.editing = null;
   const p = pageById(pid); if (!p) return;
   const a = p.annots.find(x => x.id === aid);
-  if (a && !a.text.trim()) { p.annots = p.annots.filter(x => x !== a); if (S.sel && S.sel.aid === aid) S.sel = null; }
+  const unchanged = a && a.type === "textedit" && a.text === a.orig && a.font === a.o.font && a.size === a.o.size && !!a.bold === !!a.o.bold && !!a.italic === !!a.o.italic && a.color === a.o.color;
+  if (a && ((a.type === "text" && !a.text.trim()) || unchanged)) { p.annots = p.annots.filter(x => x !== a); if (S.sel && S.sel.aid === aid) S.sel = null; }
   renderLayer(p); renderProps();
   if (save) commit();
 }
@@ -560,9 +591,17 @@ viewer.addEventListener("pointerdown", e => {
   }
   if (S.editing) stopEditing(true);
 
+  const tl = e.target.closest(".tl");
+  if (tl && S.tool === "edittext") {
+    e.preventDefault();
+    const L = (lineReady.get(p.src + ":" + p.idx) || []).find(l => l.key === tl.dataset.lk);
+    if (L) editLine(p, L, e.clientX, e.clientY);
+    return;
+  }
   if (anEl) {
     e.preventDefault();
     const a = p.annots.find(x => x.id === anEl.dataset.aid); if (!a) return;
+    if (a.type === "textedit") { startEditing(p, a); placeCaret(a.id, e.clientX, e.clientY); return; }
     if (!S.sel || S.sel.aid !== a.id) select(p.id, a.id);
     const target = viewer.querySelector(`.an[data-aid="${a.id}"]`);
     const resizing = !!e.target.closest(".an-h");
@@ -735,9 +774,275 @@ $("#imgIn").addEventListener("change", async e => {
   try { const id = registerImage(await prepImage(f)); placeImage(id, 200); } catch (err) { toast(err.message, { err: true }); }
 });
 
+/* ---------- edit existing text (digital PDFs) ---------- */
+function vpOf(p, scale = 1, rotation) {
+  const d = dims.get(p.src + ":" + p.idx);
+  return new pdfjsLib.PageViewport({ viewBox: d.view, scale, rotation: rotation == null ? disp(p).r : rotation });
+}
+function dispBox(vp, r) {
+  const pts = [[r[0], r[1]], [r[2], r[1]], [r[0], r[3]], [r[2], r[3]]].map(([x, y]) => vp.convertToViewportPoint(x, y));
+  const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+}
+function lineGeom(x0, x1, by, size, top, bottom) {
+  return {
+    rect: [x0 - 0.6, Math.min(bottom == null ? Infinity : bottom, by - 0.24 * size), x1 + 0.6, Math.max(top == null ? -Infinity : top, by + 0.9 * size)],   // zona a tapar
+    band: [x0 - 1, by - 0.45 * size, x1 + 1, by + 0.45 * size]                          // zona donde se borra el texto real
+  };
+}
+function getLines(p) {
+  const k = p.src + ":" + p.idx;
+  if (!lineCache.has(k)) {
+    lineCache.set(k, (async () => {
+      let lines = [];
+      try {
+        const pg = await getPjs(p.src, p.idx);
+        const tc = await pg.getTextContent();
+        lines = groupLines(tc, pg, k);
+      } catch (e) { console.error(e); }
+      const prev = lineReady.get(k) || [];
+      lineReady.set(k, prev.concat(lines));
+      return lineReady.get(k);
+    })());
+  }
+  return lineCache.get(k);
+}
+function groupLines(tc, pg, k) {
+  const items = [];
+  for (const it of tc.items) {
+    if (!it || typeof it.str !== "string" || !it.str.length) continue;
+    const [a, b, c, d, e, f] = it.transform;
+    if (!(a > 0 && d > 0) || Math.abs(b) > 0.02 * a || Math.abs(c) > 0.02 * d) continue;   // solo texto horizontal
+    const st = tc.styles[it.fontName] || {};
+    if (st.vertical) continue;
+    items.push({ str: it.str, x0: e, x1: e + (it.width || 0), by: f, size: d, fontName: it.fontName, st });
+  }
+  items.sort((p, q) => q.by - p.by || p.x0 - q.x0);
+  const rows = [];
+  for (const it of items) {
+    const r = rows.find(r => Math.abs(r.by - it.by) <= 0.35 * Math.min(r.size, it.size));
+    if (r) r.items.push(it); else rows.push({ by: it.by, size: it.size, items: [it] });
+  }
+  const lines = [];
+  for (const r of rows) {
+    r.items.sort((p, q) => p.x0 - q.x0);
+    let seg = null;
+    const flush = () => { if (seg && seg.text.trim()) lines.push(seg); seg = null; };
+    for (const it of r.items) {
+      if (seg && it.x0 - seg.x1 > 1.5 * Math.max(seg.size, it.size)) flush();   // columnas o celdas separadas
+      if (!seg) { seg = { x0: it.x0, x1: it.x1, text: it.str, main: it, size: it.size }; continue; }
+      const gap = it.x0 - seg.x1;
+      if (gap > 0.15 * it.size && !/\s$/.test(seg.text) && !/^\s/.test(it.str)) seg.text += " ";
+      seg.text += it.str; seg.x1 = Math.max(seg.x1, it.x1);
+      if (it.str.trim().length > seg.main.str.trim().length) seg.main = it;
+      seg.size = Math.max(seg.size, it.size);
+    }
+    flush();
+  }
+  return lines.map((L, i) => {
+    const m = L.main, size = Math.round(m.size * 10) / 10;
+    const fi = fontInfo(pg, m.fontName, m.st);
+    return Object.assign({ key: k + "#" + i, text: L.text.replace(/\s+$/, ""), x0: L.x0, x1: L.x1, by: m.by, size }, fi, lineGeom(L.x0, L.x1, m.by, size));
+  });
+}
+function fontInfo(pg, fontName, st) {
+  let name = "", bold = false, italic = false;
+  try { if (pg.commonObjs.has(fontName)) { const f = pg.commonObjs.get(fontName); name = f.name || ""; bold = !!(f.bold || f.black); italic = !!f.italic; } } catch { }
+  const fam = (st && st.fontFamily) || "";
+  const font = fam === "monospace" || /courier|mono|consol/i.test(name) ? "Courier"
+    : fam === "serif" || /times|serif|georgia|garamond|cambria|roman|palatino|book|cmr|lmr|minion/i.test(name) ? "Times" : "Helvetica";
+  if (/bold|black|heavy|semibold|demi/i.test(name)) bold = true;
+  if (/italic|oblique|cmti|lmri/i.test(name)) italic = true;
+  return { font, bold, italic, fontLabel: name.replace(/^[A-Z]{6}\+/, "") };
+}
+function addLineBoxes(p, layer) {
+  const k = p.src + ":" + p.idx, lines = lineReady.get(k);
+  if (!lines || !lineCache.has(k)) {
+    getLines(p).then(() => { if (S.tool === "edittext" && layerOf(p.id) === layer) { renderLayer(p, layer); renderProps(); } });
+    return;
+  }
+  const taken = new Set(p.annots.filter(a => a.type === "textedit").map(a => a.lk));
+  const vp = vpOf(p), z = S.zoom;
+  for (const L of lines) {
+    if (taken.has(L.key)) continue;
+    const b = dispBox(vp, L.rect), d = el("div", "tl" + (L.ocr ? " ocr" : ""));
+    d.dataset.lk = L.key; d.title = L.fontLabel ? `Clic para editar · ${L.fontLabel} ${L.size} pt` : "Clic para editar";
+    Object.assign(d.style, { left: b.x * z + "px", top: b.y * z + "px", width: b.w * z + "px", height: b.h * z + "px" });
+    layer.append(d);
+  }
+}
+async function pageBitmap(p) {
+  const k = p.src + ":" + p.idx;
+  if (!sampleCache.has(k)) {
+    sampleCache.set(k, (async () => {
+      const pg = await getPjs(p.src, p.idx), vp = pg.getViewport({ scale: 2, rotation: 0 });
+      const c = document.createElement("canvas"); c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+      const ctx = c.getContext("2d", { willReadFrequently: true }); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+      await pg.render({ canvasContext: ctx, viewport: vp }).promise;
+      return { c, ctx, vp };
+    })());
+    while (sampleCache.size > 4) sampleCache.delete(sampleCache.keys().next().value);
+  }
+  return sampleCache.get(k);
+}
+const toHex = (r, g, b) => "#" + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+async function sampleColors(p, rect) {
+  const dflt = { bg: "#ffffff", fg: "#000000" };
+  try {
+    const { c, ctx, vp } = await pageBitmap(p);
+    const [ax, ay] = vp.convertToViewportPoint(rect[0], rect[3]), [bx, by] = vp.convertToViewportPoint(rect[2], rect[1]);
+    const X0 = Math.max(0, Math.floor(Math.min(ax, bx)) - 3), Y0 = Math.max(0, Math.floor(Math.min(ay, by)) - 3);
+    const X1 = Math.min(c.width, Math.ceil(Math.max(ax, bx)) + 3), Y1 = Math.min(c.height, Math.ceil(Math.max(ay, by)) + 3);
+    const w = X1 - X0, h = Y1 - Y0; if (w < 8 || h < 8) return dflt;
+    const d = ctx.getImageData(X0, Y0, w, h).data;
+    const buckets = new Map();
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (x > 1 && y > 1 && x < w - 2 && y < h - 2) continue;   // solo el borde exterior
+      const i = (y * w + x) * 4, key = (d[i] >> 4) << 8 | (d[i + 1] >> 4) << 4 | (d[i + 2] >> 4);
+      const bk = buckets.get(key) || [0, 0, 0, 0]; bk[0] += d[i]; bk[1] += d[i + 1]; bk[2] += d[i + 2]; bk[3]++; buckets.set(key, bk);
+    }
+    let best = null; for (const v of buckets.values()) if (!best || v[3] > best[3]) best = v;
+    const bg = [best[0] / best[3], best[1] / best[3], best[2] / best[3]];
+    let maxd = 0;
+    const dist = i => Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]);
+    for (let y = 3; y < h - 3; y++) for (let x = 3; x < w - 3; x++) maxd = Math.max(maxd, dist((y * w + x) * 4));
+    let fg = [0, 0, 0];
+    if (maxd > 60) {
+      let n = 0, s0 = 0, s1 = 0, s2 = 0;
+      for (let y = 3; y < h - 3; y++) for (let x = 3; x < w - 3; x++) { const i = (y * w + x) * 4; if (dist(i) >= 0.75 * maxd) { s0 += d[i]; s1 += d[i + 1]; s2 += d[i + 2]; n++; } }
+      if (n) fg = [s0 / n, s1 / n, s2 / n];
+    }
+    const grey = Math.max(...fg) - Math.min(...fg) < 24, lum = (fg[0] + fg[1] + fg[2]) / 3;
+    if (grey && lum < 100) fg = [0, 0, 0];                          // el antialiasing aclara el negro
+    const bgHex = bg.every(v => v > 246) ? "#ffffff" : toHex(...bg);
+    return { bg: bgHex, fg: toHex(...fg) };
+  } catch (e) { console.error(e); return dflt; }
+}
+async function editLine(p, L, cx, cy) {
+  stopEditing(true);
+  const col = await sampleColors(p, L.rect);
+  const a = {
+    id: uid("a"), type: "textedit", lk: L.key, ocr: !!L.ocr, rect: L.rect, band: L.band, bx: L.x0, by: L.by,
+    size: L.size, font: L.font, bold: L.bold, italic: L.italic, color: col.fg, bg: col.bg, orig: L.text, text: L.text
+  };
+  a.o = { font: a.font, size: a.size, bold: a.bold, italic: a.italic, color: a.color }; a.fl = L.fontLabel || "";
+  if (!pageById(p.id)) return;
+  p.annots.push(a); startEditing(p, a);
+  placeCaret(a.id, cx, cy);
+}
+function placeCaret(aid, cx, cy) {
+  const tx = viewer.querySelector(`.an[data-aid="${aid}"] .an-tx`); if (!tx || cx == null) return;
+  let r = null;
+  try {
+    if (document.caretRangeFromPoint) r = document.caretRangeFromPoint(cx, cy);
+    else if (document.caretPositionFromPoint) { const cp = document.caretPositionFromPoint(cx, cy); if (cp) { r = document.createRange(); r.setStart(cp.offsetNode, cp.offset); r.collapse(true); } }
+  } catch { r = null; }
+  if (r && tx.contains(r.startContainer)) { const sl = getSelection(); sl.removeAllRanges(); sl.addRange(r); }
+}
+/* remove the original text from the page content (true deletion, not just covering it) */
+function stripText(out, page, bands) {
+  const zeros = bands.map(() => 0);
+  try {
+    const { PDFName, PDFArray, PDFRawStream, decodePDFRawStream } = PDFLib;
+    if (!window.PdfTextRemover || !decodePDFRawStream) return zeros;
+    const contents = page.node.Contents(); if (!contents) return zeros;
+    const streams = [];
+    if (contents instanceof PDFArray) for (let i = 0; i < contents.size(); i++) streams.push(out.context.lookup(contents.get(i)));
+    else streams.push(contents);
+    const chunks = [];
+    for (const st of streams) {
+      if (st instanceof PDFRawStream) chunks.push(decodePDFRawStream(st).decode());
+      else if (st && typeof st.getUnencodedContents === "function") chunks.push(st.getUnencodedContents());
+      else return zeros;
+    }
+    let total = 0; for (const c of chunks) total += c.length + 1;
+    const all = new Uint8Array(total); let off = 0;
+    for (const c of chunks) { all.set(c, off); off += c.length; all[off++] = 10; }
+    const res = PdfTextRemover.removeTextInRects(all, bands, 1);
+    if (res.changed) page.node.set(PDFName.of("Contents"), out.context.obj([out.context.register(out.context.flateStream(res.bytes))]));
+    return res.removed;
+  } catch (e) { console.error(e); return zeros; }
+}
+
+/* ---------- OCR (scanned pages) — Tesseract.js, Apache 2.0 ---------- */
+let ocrWorker = null, ocrProgress = null;
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.append(s); }); }
+async function urlExists(u) {
+  if (!/^https?:/.test(location.protocol)) return false;
+  try { const r = await fetch(u, { method: "HEAD", cache: "no-store" }); return r.ok; } catch { return false; }
+}
+async function getOcr() {
+  if (!window.Tesseract) {
+    if (await urlExists("vendor/tesseract/tesseract.min.js")) { try { await loadScript("vendor/tesseract/tesseract.min.js"); } catch { } }
+    if (!window.Tesseract) await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js");
+  }
+  if (ocrWorker) return ocrWorker;
+  const abs = u => new URL(u, location.href).href;
+  const opts = { logger: m => ocrProgress && ocrProgress(m) };
+  let langs = ["spa", "eng"];
+  if (await urlExists("vendor/tesseract/worker.min.js")) Object.assign(opts, { workerPath: abs("vendor/tesseract/worker.min.js"), corePath: abs("vendor/tesseract/core") });
+  const have = [];
+  for (const l of ["spa", "eng"]) if (await urlExists(`vendor/tesseract/lang/${l}.traineddata.gz`)) have.push(l);
+  if (have.length) { opts.langPath = abs("vendor/tesseract/lang"); langs = have; }
+  else if (await urlExists("lang/eng-traineddata.wasm")) {
+    // vista previa alojada: solo hay inglés, publicado con otra extensión (el "?" hace que se ignore el resto de la ruta)
+    opts.langPath = abs("lang/eng-traineddata.wasm") + "?f="; langs = ["eng"];
+  }
+  ocrWorker = await Tesseract.createWorker(langs, 1, opts);
+  ocrWorker.langs = langs;
+  return ocrWorker;
+}
+async function runOcr(p) {
+  const k = p.src + ":" + p.idx;
+  const d = dims.get(k);
+  if (d.r0) { toast("Esta página tiene una rotación interna que el OCR todavía no admite.", { err: true }); return; }
+  stopEditing(true);
+  await getLines(p);
+  try {
+    const found = await busy("Preparando el reconocimiento de texto…", async say => {
+      ocrProgress = m => { if (m && m.status) say(m.status === "recognizing text" ? `Reconociendo texto… ${Math.round((m.progress || 0) * 100)}%` : "Cargando el reconocimiento de texto…"); };
+      const w = await getOcr();
+      const pg = await getPjs(p.src, p.idx);
+      const scale = Math.min(3, 3500 / Math.max(d.w, d.h));
+      const vp = pg.getViewport({ scale, rotation: 0 });
+      const c = document.createElement("canvas"); c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+      const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+      say("Preparando la página…");
+      await pg.render({ canvasContext: ctx, viewport: vp }).promise;
+      const { data } = await w.recognize(c);
+      const out = [];
+      for (const l of data.lines || []) {
+        const text = (l.text || "").replace(/\s+$/, "");
+        if (!text.trim() || (l.confidence != null && l.confidence < 35)) continue;
+        const bb = l.bbox, hasBase = l.baseline && l.baseline.has_baseline !== false && l.baseline.y0 != null;
+        const baseY = hasBase ? (l.baseline.y0 + l.baseline.y1) / 2 : bb.y1 - (bb.y1 - bb.y0) * 0.22;
+        const [ux0, uTop] = vp.convertToPdfPoint(bb.x0, bb.y0), [ux1, uBot] = vp.convertToPdfPoint(bb.x1, bb.y1);
+        const [, uby] = vp.convertToPdfPoint(bb.x0, baseY);
+        const size = Math.max(4, Math.min(72, Math.round(((baseY - bb.y0) / scale / 0.72) * 2) / 2));
+        out.push(Object.assign({ key: k + "#o" + out.length, ocr: true, text, x0: ux0, x1: ux1, by: uby, size, font: "Helvetica", bold: false, italic: false, fontLabel: "" },
+          lineGeom(ux0, ux1, uby, size, uTop + 1, uBot - 1)));
+      }
+      const prev = (lineReady.get(k) || []).filter(L => !L.ocr);
+      const inside = (L, R) => { const cx = (L.rect[0] + L.rect[2]) / 2, cy = (L.rect[1] + L.rect[3]) / 2; return cx > R.rect[0] && cx < R.rect[2] && cy > R.rect[1] && cy < R.rect[3]; };
+      const fresh = out.filter(L => !prev.some(Q => inside(L, Q) || inside(Q, L)));
+      out.length = 0; out.push(...fresh);
+      lineReady.set(k, prev.concat(out)); if (!lineCache.has(k)) lineCache.set(k, Promise.resolve(lineReady.get(k)));
+      return out.length;
+    });
+    S.pages.filter(q => q.src === p.src && q.idx === p.idx).forEach(q => renderLayer(q));
+    renderProps(true);
+    toast(found ? `Se reconocieron ${found} línea${found > 1 ? "s" : ""}. Haz clic en una para editarla.` : "No se encontró texto legible en esta página.");
+  } catch (e) {
+    console.error(e); ocrWorker = null;
+    toast("No se pudo cargar el reconocimiento de texto. Revisa tu conexión a internet o usa la versión instalada (npm install).", { err: true, ms: 8000 });
+  } finally { ocrProgress = null; }
+}
+
 /* ---------- page operations ---------- */
 function rotTransform(a, d, cw) {
   // d = display size before rotation; returns annot in the new display space
+  if (a.type === "textedit") return; // stored in PDF coordinates, follows the page by itself
   const W = d.w, H = d.h;
   const tp = cw ? ([x, y]) => [H - y, x] : ([x, y]) => [y, W - x];
   if (a.type === "ink") { a.pts = a.pts.map(tp); return; }
@@ -838,7 +1143,7 @@ function freeSources(ids) {
     const s = S.sources.get(id); if (!s) continue;
     try { s.pdf.destroy(); } catch { }
     S.sources.delete(id);
-    for (const m of [pjsCache, dims, thumbCache]) for (const k of [...m.keys()]) if (k.startsWith(id + ":")) m.delete(k);
+    for (const m of [pjsCache, dims, thumbCache, lineCache, lineReady, sampleCache]) for (const k of [...m.keys()]) if (k.startsWith(id + ":")) m.delete(k);
     if (blankSrc === id) blankSrc = null;
   }
   for (const k of [...bmpCache.keys()]) if (!S.sources.has(k.split(":")[0])) bmpCache.delete(k);
@@ -907,7 +1212,8 @@ async function buildPdf(list) {
     idxs.forEach((pi, k) => copied[pi] = arr[k]);
   }
   const fonts = {}, embImgs = new Map();
-  const getFont = async (name, bold) => { const k = FONTS[name].std[bold ? 1 : 0]; if (!fonts[k]) fonts[k] = await out.embedFont(StandardFonts[k]); return fonts[k]; };
+  const getFont = async (name, bold, italic) => { const k = FONTS[name].std[(bold ? 1 : 0) + (italic ? 2 : 0)]; if (!fonts[k]) fonts[k] = await out.embedFont(StandardFonts[k]); return fonts[k]; };
+  buildPdf.stats = { removed: 0, covered: 0 };
   for (let i = 0; i < list.length; i++) {
     const p = list[i], page = copied[i];
     out.addPage(page);
@@ -916,9 +1222,26 @@ async function buildPdf(list) {
     const vp = pjs.getViewport({ scale: 1, rotation: R });
     const P = (x, y) => { const [px, py] = vp.convertToPdfPoint(x, y); return { x: px, y: py }; };
     const rot = degrees(R);
+    const edits = p.annots.filter(a => a.type === "textedit");
+    if (edits.length) {
+      const removed = stripText(out, page, edits.map(a => a.band));
+      for (let k = 0; k < edits.length; k++) {
+        const a = edits[k], [x0, y0, x1, y1] = a.rect;
+        if (removed[k] > 0) buildPdf.stats.removed++;
+        else {
+          page.drawRectangle({ x: x0, y: y0, width: x1 - x0, height: y1 - y0, color: hexRgb(a.bg), borderWidth: 0 });
+          if (!a.ocr) buildPdf.stats.covered++;
+        }
+        if (!a.text) continue;
+        const font = await getFont(a.font in FONTS ? a.font : "Helvetica", a.bold, a.italic);
+        a.text.split("\n").forEach((line, j) => {
+          if (line) page.drawText(safeText(font, line), { x: a.bx, y: a.by - j * a.size * 1.2, size: a.size, font, color: hexRgb(a.color) });
+        });
+      }
+    }
     for (const a of p.annots) {
       if (a.type === "text") {
-        const font = await getFont(a.font in FONTS ? a.font : "Helvetica", a.bold), f = FONTS[a.font] || FONTS.Helvetica;
+        const font = await getFont(a.font in FONTS ? a.font : "Helvetica", a.bold, a.italic), f = FONTS[a.font] || FONTS.Helvetica;
         a.text.split("\n").forEach((line, j) => {
           if (!line) return;
           const o = P(a.x, a.y + a.size * f.base + j * a.size * 1.2);
@@ -969,6 +1292,8 @@ async function exportPages(list, name) {
     const bytes = await busy("Generando PDF…", () => buildPdf(list));
     const ok = await saveFile(name, bytes, "application/pdf");
     if (ok && list === S.pages) { savedBase = state; updDocLabel(); }
+    const st = buildPdf.stats || {};
+    if (ok && st.covered) toast(`Guardado. ${st.covered === 1 ? "1 línea editada se tapó" : st.covered + " líneas editadas se taparon"} en lugar de borrarse: el texto original sigue dentro del archivo, oculto.`, { ms: 9000 });
     return ok;
   } catch (e) { console.error(e); toast("No se pudo generar el PDF: " + (e.message || e), { err: true, ms: 7000 }); return false; }
 }
@@ -1180,14 +1505,18 @@ document.addEventListener("keydown", e => {
   if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); $("#bSave").click(); return; }
   if (e.key === "Escape") { if (S.editing) { stopEditing(true); return; } if (S.sel) { select(S.sel.pid, null); return; } if (S.tool !== "select") setTool("select"); return; }
   if (typing || mod) return;
-  if ((e.key === "Delete" || e.key === "Backspace") && S.sel) { e.preventDefault(); deleteAnnot(S.sel.pid, S.sel.aid); return; }
+  if ((e.key === "Delete" || e.key === "Backspace") && S.sel) {
+    e.preventDefault(); const cs = selAnnot();
+    if (cs && cs.a.type === "textedit") { cs.a.text = ""; renderLayer(cs.p); renderProps(true); commit(); } else deleteAnnot(S.sel.pid, S.sel.aid);
+    return;
+  }
   const s = selAnnot();
-  if (s && e.key.startsWith("Arrow")) {
+  if (s && s.a.type !== "textedit" && e.key.startsWith("Arrow")) {
     e.preventDefault(); const st = e.shiftKey ? 10 : 1, dx = e.key === "ArrowLeft" ? -st : e.key === "ArrowRight" ? st : 0, dy = e.key === "ArrowUp" ? -st : e.key === "ArrowDown" ? st : 0;
     if (s.a.type === "ink") s.a.pts = s.a.pts.map(([x, y]) => [x + dx, y + dy]); else { s.a.x += dx; s.a.y += dy; }
     renderLayer(s.p); commit(); return;
   }
-  const map = { v: "select", t: "text", h: "highlight", d: "draw" };
+  const map = { v: "select", t: "text", h: "highlight", d: "draw", e: "edittext" };
   if (map[e.key.toLowerCase()]) setTool(map[e.key.toLowerCase()]);
 });
 $("#bUndo").onclick = undo; $("#bRedo").onclick = redo;

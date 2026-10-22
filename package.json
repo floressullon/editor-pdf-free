@@ -1,7 +1,7 @@
 {
   "name": "editor-pdf-free",
-  "version": "0.1.0",
-  "description": "Editor de PDF gratuito y de código abierto: fusionar, organizar páginas, agregar texto, imágenes y firmas, resaltar y tapar. Funciona en el navegador y como app de escritorio.",
+  "version": "0.2.0",
+  "description": "Editor de PDF gratuito y de código abierto: editar y borrar el texto existente, OCR, fusionar, organizar páginas, agregar texto, imágenes y firmas. Funciona en el navegador y como app de escritorio.",
   "license": "MIT",
   "author": "Colaboradores del proyecto",
   "main": "electron/main.js",
@@ -12,7 +12,9 @@
     "fusionar",
     "open-source",
     "pdf.js",
-    "pdf-lib"
+    "pdf-lib",
+    "ocr",
+    "tesseract"
   ],
   "scripts": {
     "postinstall": "node scripts/copy-vendor.js",
@@ -22,12 +24,18 @@
     "package": "npm run vendor && electron-builder --config electron-builder.config.js",
     "package:win": "npm run vendor && electron-builder --config electron-builder.config.js --win",
     "package:mac": "npm run vendor && electron-builder --config electron-builder.config.js --mac",
-    "package:linux": "npm run vendor && electron-builder --config electron-builder.config.js --linux"
+    "package:linux": "npm run vendor && electron-builder --config electron-builder.config.js --linux",
+    "single": "node scripts/build-single.js"
   },
   "dependencies": {
     "jszip": "3.10.1",
     "pdf-lib": "1.17.1",
-    "pdfjs-dist": "3.11.174"
+    "pdfjs-dist": "3.11.174",
+    "tesseract.js": "5.1.1"
+  },
+  "optionalDependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/spa": "^1.0.0"
   },
   "devDependencies": {
     "electron": "^35.0.0",

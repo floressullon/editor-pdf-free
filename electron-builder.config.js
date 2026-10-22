@@ -6,7 +6,7 @@ module.exports = {
   productName: app.name,
   artifactName: "${productName}-${version}-${os}-${arch}.${ext}",
   directories: { output: "dist" },
-  files: ["electron/**", "public/**", "package.json"],
+  files: ["electron/**", "public/**", "scripts/serve.js", "package.json"],
   icon: "build/icon.png",
   win: { target: ["nsis", "portable"] },
   nsis: { oneClick: false, allowToChangeInstallationDirectory: true },
