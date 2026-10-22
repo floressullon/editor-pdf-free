@@ -262,6 +262,7 @@ function annotEl(a, p) {
     const inn = el("div", "te-in");
     Object.assign(inn.style, { width: W + "px", height: H + "px", left: (b.w * z - W) / 2 + "px", top: (b.h * z - H) / 2 + "px", background: a.bg, transform: R ? `rotate(${R}deg)` : "" });
     const tx = el("div", "an-tx"); tx.textContent = a.text;
+    if (a.align && a.align !== "left") Object.assign(tx.style, { width: a.aw * z + "px", textAlign: a.align });
     Object.assign(tx.style, { left: (a.bx - x0) * z + "px", top: ((y1 - a.by) - a.size * f.base) * z + "px", fontFamily: f.css, fontSize: a.size * z + "px", color: a.color, fontWeight: a.bold ? "700" : "400", fontStyle: a.italic ? "italic" : "normal" });
     inn.append(tx); e.append(inn);
   } else if (a.type === "image") {
@@ -801,6 +802,7 @@ function getLines(p) {
         const tc = await pg.getTextContent();
         lines = groupLines(tc, pg, k);
       } catch (e) { console.error(e); }
+      try { lines = lines.concat(annotLines(await (await getPjs(p.src, p.idx)).getAnnotations({ intent: "display" }), k)); } catch (e) { console.error(e); }
       const prev = lineReady.get(k) || [];
       lineReady.set(k, prev.concat(lines));
       return lineReady.get(k);
@@ -811,7 +813,7 @@ function getLines(p) {
 function groupLines(tc, pg, k) {
   const items = [];
   for (const it of tc.items) {
-    if (!it || typeof it.str !== "string" || !it.str.length) continue;
+    if (!it || typeof it.str !== "string" || !it.str.trim().length) continue;   // los espacios en blanco no unen columnas
     const [a, b, c, d, e, f] = it.transform;
     if (!(a > 0 && d > 0) || Math.abs(b) > 0.02 * a || Math.abs(c) > 0.02 * d) continue;   // solo texto horizontal
     const st = tc.styles[it.fontName] || {};
@@ -830,10 +832,10 @@ function groupLines(tc, pg, k) {
     let seg = null;
     const flush = () => { if (seg && seg.text.trim()) lines.push(seg); seg = null; };
     for (const it of r.items) {
-      if (seg && it.x0 - seg.x1 > 1.5 * Math.max(seg.size, it.size)) flush();   // columnas o celdas separadas
+      if (seg && (it.x0 - seg.x1 > 1.5 * Math.max(seg.size, it.size) || Math.max(seg.size, it.size) / Math.min(seg.size, it.size) > 1.3)) flush();   // columnas, celdas o etiquetas de otro tamaño
       if (!seg) { seg = { x0: it.x0, x1: it.x1, text: it.str, main: it, size: it.size }; continue; }
       const gap = it.x0 - seg.x1;
-      if (gap > 0.15 * it.size && !/\s$/.test(seg.text) && !/^\s/.test(it.str)) seg.text += " ";
+      if (gap > 0.15 * it.size && !/\s$/.test(seg.text) && !/^\s/.test(it.str)) seg.text += gap > 2.5 * it.size ? "  " : " ";
       seg.text += it.str; seg.x1 = Math.max(seg.x1, it.x1);
       if (it.str.trim().length > seg.main.str.trim().length) seg.main = it;
       seg.size = Math.max(seg.size, it.size);
@@ -845,6 +847,35 @@ function groupLines(tc, pg, k) {
     const fi = fontInfo(pg, m.fontName, m.st);
     return Object.assign({ key: k + "#" + i, text: L.text.replace(/\s+$/, ""), x0: L.x0, x1: L.x1, by: m.by, size }, fi, lineGeom(L.x0, L.x1, m.by, size));
   });
+}
+/* text that lives in form fields or text boxes placed over the page (filled forms, "typewriter" text) */
+function annotLines(anns, k) {
+  const out = [];
+  anns.forEach((a, i) => {
+    if (!a || a.hidden || !a.rect) return;
+    const isField = a.subtype === "Widget" && a.fieldType === "Tx";
+    const isBox = a.subtype === "FreeText";
+    if (!isField && !isBox) return;
+    let text = isField ? (typeof a.fieldValue === "string" ? a.fieldValue : "") : ((a.contentsObj && a.contentsObj.str) || (Array.isArray(a.textContent) ? a.textContent.join("\n") : ""));
+    text = String(text).replace(/\r\n?/g, "\n");
+    const x0 = Math.min(a.rect[0], a.rect[2]), x1 = Math.max(a.rect[0], a.rect[2]), y0 = Math.min(a.rect[1], a.rect[3]), y1 = Math.max(a.rect[1], a.rect[3]);
+    const h = y1 - y0, w = x1 - x0; if (w < 4 || h < 4) return;
+    const da = a.defaultAppearanceData || {}, nl = Math.max(1, text.split("\n").length);
+    const multi = isBox || !!a.multiLine || nl > 1;
+    let size = da.fontSize > 0 ? da.fontSize : multi ? (h - 4) / (nl * 1.17) : h * 0.62;
+    size = Math.round(Math.max(5, Math.min(multi ? 14 : 12, size)) * 2) / 2;
+    const fname = String(da.fontName || "");
+    const font = /cour/i.test(fname) ? "Courier" : /tim|tiro|serif/i.test(fname) ? "Times" : "Helvetica";
+    const by = multi ? y1 - 2 - 0.86 * size : y0 + (h - size) / 2 + 0.22 * size;
+    const align = isField ? (a.textAlignment === 1 ? "center" : a.textAlignment === 2 ? "right" : "left") : "left";
+    out.push({
+      key: k + "#a" + i, ann: { sub: a.subtype, rect: [x0, y0, x1, y1] }, align, aw: w - 4,
+      text, x0: x0 + 2, x1: x1 - 2, by, size, font, bold: /bold|bd/i.test(fname), italic: false,
+      fontLabel: isField ? `campo de formulario${a.fieldName ? " «" + a.fieldName + "»" : ""}` : "cuadro de texto",
+      rect: [x0 + 0.8, y0 + 0.8, x1 - 0.8, y1 - 0.8], band: [x0, y0, x1, y1]
+    });
+  });
+  return out;
 }
 function fontInfo(pg, fontName, st) {
   let name = "", bold = false, italic = false;
@@ -866,7 +897,7 @@ function addLineBoxes(p, layer) {
   const vp = vpOf(p), z = S.zoom;
   for (const L of lines) {
     if (taken.has(L.key)) continue;
-    const b = dispBox(vp, L.rect), d = el("div", "tl" + (L.ocr ? " ocr" : ""));
+    const b = dispBox(vp, L.rect), d = el("div", "tl" + (L.ocr ? " ocr" : "") + (L.ann ? " field" : ""));
     d.dataset.lk = L.key; d.title = L.fontLabel ? `Clic para editar · ${L.fontLabel} ${L.size} pt` : "Clic para editar";
     Object.assign(d.style, { left: b.x * z + "px", top: b.y * z + "px", width: b.w * z + "px", height: b.h * z + "px" });
     layer.append(d);
@@ -923,7 +954,7 @@ async function editLine(p, L, cx, cy) {
   stopEditing(true);
   const col = await sampleColors(p, L.rect);
   const a = {
-    id: uid("a"), type: "textedit", lk: L.key, ocr: !!L.ocr, rect: L.rect, band: L.band, bx: L.x0, by: L.by,
+    id: uid("a"), type: "textedit", lk: L.key, ocr: !!L.ocr, ann: L.ann || null, align: L.align || "left", aw: L.aw || 0, rect: L.rect, band: L.band, bx: L.x0, by: L.by,
     size: L.size, font: L.font, bold: L.bold, italic: L.italic, color: col.fg, bg: col.bg, orig: L.text, text: L.text
   };
   a.o = { font: a.font, size: a.size, bold: a.bold, italic: a.italic, color: a.color }; a.fl = L.fontLabel || "";
@@ -939,6 +970,35 @@ function placeCaret(aid, cx, cy) {
     else if (document.caretPositionFromPoint) { const cp = document.caretPositionFromPoint(cx, cy); if (cp) { r = document.createRange(); r.setStart(cp.offsetNode, cp.offset); r.collapse(true); } }
   } catch { r = null; }
   if (r && tx.contains(r.startContainer)) { const sl = getSelection(); sl.removeAllRanges(); sl.addRange(r); }
+}
+/* remove form fields / text boxes (annotations) from a page, matched by type and position */
+function removeAnnots(out, page, anns) {
+  const found = anns.map(() => false);
+  if (!anns.length) return found;
+  try {
+    const { PDFName, PDFArray, PDFDict, PDFNumber } = PDFLib;
+    const arr = page.node.lookup(PDFName.of("Annots"));
+    if (!(arr instanceof PDFArray)) return found;
+    const keep = [];
+    for (let i = 0; i < arr.size(); i++) {
+      const ref = arr.get(i), d = out.context.lookup(ref);
+      let drop = false;
+      if (d instanceof PDFDict) {
+        const sub = String(d.get(PDFName.of("Subtype")) || "");
+        const r = d.lookup(PDFName.of("Rect"));
+        const v = r instanceof PDFArray ? r.asArray().map(n => (n instanceof PDFNumber ? n.asNumber() : NaN)) : [];
+        if (v.length === 4) {
+          const R = [Math.min(v[0], v[2]), Math.min(v[1], v[3]), Math.max(v[0], v[2]), Math.max(v[1], v[3])];
+          anns.forEach((a, j) => {
+            if (!found[j] && sub === "/" + a.sub && R.every((x, n) => Math.abs(x - a.rect[n]) < 0.6)) { found[j] = true; drop = true; }
+          });
+        }
+      }
+      if (!drop) keep.push(ref);
+    }
+    if (found.some(Boolean)) page.node.set(PDFName.of("Annots"), out.context.obj(keep));
+  } catch (e) { console.error(e); }
+  return found;
 }
 /* remove the original text from the page content (true deletion, not just covering it) */
 function stripText(out, page, bands) {
@@ -1226,7 +1286,9 @@ async function buildPdf(list) {
     const rot = degrees(R);
     const edits = p.annots.filter(a => a.type === "textedit");
     if (edits.length) {
-      const removed = stripText(out, page, edits.map(a => a.band));
+      const inPage = edits.filter(a => !a.ann), onTop = edits.filter(a => a.ann);
+      const r1 = stripText(out, page, inPage.map(a => a.band)), r2 = removeAnnots(out, page, onTop.map(a => a.ann));
+      const removed = edits.map(a => a.ann ? (r2[onTop.indexOf(a)] ? 1 : 0) : r1[inPage.indexOf(a)]);
       for (let k = 0; k < edits.length; k++) {
         const a = edits[k], [x0, y0, x1, y1] = a.rect;
         if (removed[k] > 0) buildPdf.stats.removed++;
@@ -1237,7 +1299,11 @@ async function buildPdf(list) {
         if (!a.text) continue;
         const font = await getFont(a.font in FONTS ? a.font : "Helvetica", a.bold, a.italic);
         a.text.split("\n").forEach((line, j) => {
-          if (line) page.drawText(safeText(font, line), { x: a.bx, y: a.by - j * a.size * 1.2, size: a.size, font, color: hexRgb(a.color) });
+          if (!line) return;
+          const t = safeText(font, line);
+          let x = a.bx;
+          if (a.align === "center" || a.align === "right") { const tw = font.widthOfTextAtSize(t, a.size); x = a.align === "center" ? a.bx + (a.aw - tw) / 2 : a.bx + a.aw - tw; }
+          page.drawText(t, { x, y: a.by - j * a.size * 1.2, size: a.size, font, color: hexRgb(a.color) });
         });
       }
     }
