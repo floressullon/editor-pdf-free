@@ -21,7 +21,11 @@
     appId: "io.github.editorpdffree",
 
     // Frase corta que describe la aplicación
-    tagline: "Editor de PDF gratuito y de código abierto"
+    tagline: "Editor de PDF gratuito y de código abierto",
+
+    // Botones opcionales de la herramienta "Editar texto" (true = mostrar, false = ocultar)
+    showOcrButton: false,        // "Reconocer texto (OCR)" para páginas escaneadas
+    showDiagnosisButton: false   // "¿Qué hay en esta página?" (diagnóstico)
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = config;

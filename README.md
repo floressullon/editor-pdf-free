@@ -22,7 +22,7 @@ Editor de PDF **gratuito y de código abierto**. Funciona en el navegador o como
 2. Haz clic en una línea: aparece con su texto para corregirlo. Déjala vacía (o pulsa **Borrar línea**) para eliminarla. La **×** restaura el original.
 3. Al guardar, el editor borra del archivo las instrucciones que dibujaban el texto original y escribe el nuevo en el mismo lugar, con el tamaño, el color y el estilo detectados (Arial, Times o Courier, la más parecida a la original).
 4. Si en algún caso no puede borrar el original con seguridad (por ejemplo, texto dentro de un formulario o un bloque especial), lo tapa con el color de fondo y te avisa al guardar.
-5. En páginas escaneadas, pulsa **Reconocer texto (OCR)**: las líneas detectadas se vuelven editables. Como en un escaneo el texto es parte de la imagen, ahí la línea original se tapa con el color del papel.
+5. En páginas escaneadas, pulsa **Reconocer texto (OCR)**: las líneas detectadas se vuelven editables. Este botón y el de diagnóstico vienen ocultos; se activan en `public/js/config.js` (`showOcrButton` y `showDiagnosisButton`). Como en un escaneo el texto es parte de la imagen, ahí la línea original se tapa con el color del papel.
 
 **Límites actuales:** se edita línea por línea (no reacomoda párrafos como Word); la letra de reemplazo es la estándar más parecida, no la original exacta; el OCR funciona mejor con escaneos nítidos y texto impreso (no manuscrito); no convierte a Word/Excel, la firma es visual (no es firma digital con certificado), no abre PDF protegidos con contraseña.
 

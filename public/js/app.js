@@ -4,7 +4,7 @@ const $ = s => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
 /* ---------- app name (public/js/config.js) ---------- */
-const CFG = Object.assign({ name: "Editor de PDF", highlight: "", tagline: "" }, window.APP_CONFIG || {});
+const CFG = Object.assign({ name: "Editor de PDF", highlight: "", tagline: "", showOcrButton: false, showDiagnosisButton: false }, window.APP_CONFIG || {});
 document.title = CFG.name;
 (() => {
   const h = $("#appName"), i = CFG.highlight ? CFG.name.lastIndexOf(CFG.highlight) : -1;
@@ -498,14 +498,15 @@ function renderProps(force) {
     }
   } else if (kind === "edittext") {
     const msg = curLines && !curLines.length
-      ? "Esta página no tiene texto seleccionable. Si es un escaneo, usa Reconocer texto."
+      ? (CFG.showOcrButton ? "Esta página no tiene texto seleccionable. Si es un escaneo, usa Reconocer texto." : "Esta página no tiene texto editable (puede ser un escaneo o una imagen).")
       : "Haz clic en una línea del documento para corregirla o borrarla.";
     box.append(el("span", null, msg));
     const ob = el("button", "btn", "Reconocer texto (OCR)"); ob.style.height = "30px"; ob.title = "Detecta el texto de una página escaneada para poder editarlo";
     ob.onclick = () => { const p = pageById(S.cur); if (p) runOcr(p); };
     const db = el("button", "btn", "¿Qué hay en esta página?"); db.style.height = "30px"; db.title = "Muestra cómo está guardado el contenido de la página";
     db.onclick = () => { const p = pageById(S.cur); if (p) showDiagnosis(p); };
-    box.append(ob, db);
+    if (CFG.showOcrButton) box.append(ob);
+    if (CFG.showDiagnosisButton) box.append(db);
   } else if (kind === "highlight") {
     box.append(lab("Color", color(src ? src.color : D.hlColor, v => { D.hlColor = v; upd(a => a.color = v); })));
   } else if (kind === "whiteout") {
