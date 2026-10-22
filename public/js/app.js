@@ -503,7 +503,9 @@ function renderProps(force) {
     box.append(el("span", null, msg));
     const ob = el("button", "btn", "Reconocer texto (OCR)"); ob.style.height = "30px"; ob.title = "Detecta el texto de una página escaneada para poder editarlo";
     ob.onclick = () => { const p = pageById(S.cur); if (p) runOcr(p); };
-    box.append(ob);
+    const db = el("button", "btn", "¿Qué hay en esta página?"); db.style.height = "30px"; db.title = "Muestra cómo está guardado el contenido de la página";
+    db.onclick = () => { const p = pageById(S.cur); if (p) showDiagnosis(p); };
+    box.append(ob, db);
   } else if (kind === "highlight") {
     box.append(lab("Color", color(src ? src.color : D.hlColor, v => { D.hlColor = v; upd(a => a.color = v); })));
   } else if (kind === "whiteout") {
@@ -856,7 +858,9 @@ function annotLines(anns, k) {
     const isField = a.subtype === "Widget" && a.fieldType === "Tx";
     const isBox = a.subtype === "FreeText";
     if (!isField && !isBox) return;
-    let text = isField ? (typeof a.fieldValue === "string" ? a.fieldValue : "") : ((a.contentsObj && a.contentsObj.str) || (Array.isArray(a.textContent) ? a.textContent.join("\n") : ""));
+    const rich = a.richText && (a.richText.str || "");
+    let text = isField ? (typeof a.fieldValue === "string" ? a.fieldValue : Array.isArray(a.fieldValue) ? a.fieldValue.join(", ") : "")
+      : ((a.contentsObj && a.contentsObj.str) || rich || (Array.isArray(a.textContent) ? a.textContent.join("\n") : "") || "");
     text = String(text).replace(/\r\n?/g, "\n");
     const x0 = Math.min(a.rect[0], a.rect[2]), x1 = Math.max(a.rect[0], a.rect[2]), y0 = Math.min(a.rect[1], a.rect[3]), y1 = Math.max(a.rect[1], a.rect[3]);
     const h = y1 - y0, w = x1 - x0; if (w < 4 || h < 4) return;
@@ -970,6 +974,58 @@ function placeCaret(aid, cx, cy) {
     else if (document.caretPositionFromPoint) { const cp = document.caretPositionFromPoint(cx, cy); if (cp) { r = document.createRange(); r.setStart(cp.offsetNode, cp.offset); r.collapse(true); } }
   } catch { r = null; }
   if (r && tx.contains(r.startContainer)) { const sl = getSelection(); sl.removeAllRanges(); sl.addRange(r); }
+}
+/* page diagnosis: explains how the page content is stored (helps when something can't be edited) */
+const ANN_NAMES = { FreeText: "cuadros de texto", Widget: "campos de formulario", Stamp: "sellos", Ink: "trazos a mano", Square: "rectángulos", Circle: "círculos", Line: "líneas", Polygon: "polígonos", PolyLine: "polilíneas", Highlight: "resaltados", Underline: "subrayados", StrikeOut: "tachados", Squiggly: "ondulados", Text: "notas", Link: "enlaces", Popup: "ventanas de notas", FileAttachment: "adjuntos", Caret: "marcas de inserción", Redact: "zonas de redacción" };
+async function showDiagnosis(p) {
+  const info = await busy("Analizando la página…", async () => {
+    const pg = await getPjs(p.src, p.idx), k = p.src + ":" + p.idx;
+    const lines = await getLines(p);
+    const tc = await pg.getTextContent();
+    const anns = await pg.getAnnotations({ intent: "display" });
+    let ops = { text: 0, paths: 0, images: 0, forms: 0 };
+    try {
+      const ol = await pg.getOperatorList(), O = pdfjsLib.OPS || {};
+      for (const f of ol.fnArray) {
+        if (f === O.showText || f === O.showSpacedText || f === O.nextLineShowText || f === O.nextLineSetSpacingShowText) ops.text++;
+        else if (f === O.constructPath) ops.paths++;
+        else if (f === O.paintImageXObject || f === O.paintInlineImageXObject || f === O.paintImageMaskXObject || f === O.paintJpegXObject) ops.images++;
+        else if (f === O.paintFormXObjectBegin) ops.forms++;
+      }
+    } catch (e) { ops = null; }
+    const byType = {};
+    for (const a of anns) { const t = a.subtype || "?"; byType[t] = (byType[t] || 0) + 1; }
+    const sample = anns.filter(a => a.subtype !== "Link" && a.subtype !== "Popup").slice(0, 12).map(a => ({
+      tipo: a.subtype, campo: a.fieldType || undefined, nombre: a.fieldName || undefined,
+      texto: (typeof a.fieldValue === "string" ? a.fieldValue : "") || (a.contentsObj && a.contentsObj.str) || (a.richText && a.richText.str) || "",
+      oculto: !!a.hidden, rect: (a.rect || []).map(v => Math.round(v))
+    }));
+    const raw = tc.items.filter(i => typeof i.str === "string" && i.str.trim()).length;
+    return { k, page: pageIndex(p.id) + 1, lines: lines.filter(L => !L.ann && !L.ocr).length, fields: lines.filter(L => L.ann).length, raw, byType, ops, sample, pdfjs: pdfjsLib.version };
+  });
+  const body = el("div"); body.style.display = "flex"; body.style.flexDirection = "column"; body.style.gap = "10px";
+  const list = el("ul"); list.style.margin = "0"; list.style.paddingLeft = "18px"; list.style.lineHeight = "1.6";
+  const li = t => list.append(el("li", null, t));
+  li(`Líneas de texto del documento editables: ${info.lines} (fragmentos de texto: ${info.raw})`);
+  li(`Campos y cuadros de texto editables: ${info.fields}`);
+  const others = Object.entries(info.byType).filter(([t]) => t !== "Link" && t !== "Popup");
+  li(others.length ? "Elementos añadidos encima del documento: " + others.map(([t, n]) => `${n} ${ANN_NAMES[t] || t}`).join(", ") : "Elementos añadidos encima del documento: ninguno");
+  if (info.ops) li(`Contenido dibujado: ${info.ops.text} instrucciones de texto, ${info.ops.paths} trazos vectoriales, ${info.ops.images} imágenes`);
+  body.append(list);
+  const tips = [];
+  if (!info.raw && info.ops && info.ops.images) tips.push("La página parece un escaneo o una imagen: usa Reconocer texto (OCR).");
+  if (info.ops && info.ops.paths > 200 && info.raw < 20) tips.push("Parte del texto podría estar convertido en dibujo (trazos). Eso ya no es texto: solo se puede tapar y escribir encima, o usar OCR.");
+  if (others.some(([t]) => !["FreeText", "Widget"].includes(t))) tips.push("Los sellos, trazos y otras marcas añadidas no son texto editable: se pueden tapar y reemplazar con la herramienta Texto.");
+  if (tips.length) { const t = el("p", "small"); t.style.margin = "0"; t.textContent = tips.join(" "); body.append(t); }
+  const details = JSON.stringify({ pdfjs: info.pdfjs, pagina: info.page, lineas: info.lines, fragmentos: info.raw, campos: info.fields, anotaciones: info.byType, operaciones: info.ops, muestra: info.sample }, null, 1);
+  const pre = el("pre", null, details);
+  Object.assign(pre.style, { margin: "0", maxHeight: "160px", overflow: "auto", fontFamily: "var(--f-mono)", fontSize: "11px", background: "var(--raised)", border: "1px solid var(--line)", borderRadius: "8px", padding: "8px", whiteSpace: "pre-wrap", wordBreak: "break-word" });
+  const hint = el("p", "small", "Si algo no se puede editar, copia estos detalles y compártelos con quien te ayuda con el editor. No incluyen el contenido del documento salvo el texto de los campos añadidos."); hint.style.margin = "0";
+  body.append(pre, hint);
+  modal(`Página ${info.page}: qué contiene`, body, [
+    { label: "Copiar detalles", fn: async () => { try { await navigator.clipboard.writeText(details); toast("Detalles copiados."); } catch { const r = document.createRange(); r.selectNodeContents(pre); const sl = getSelection(); sl.removeAllRanges(); sl.addRange(r); toast("Selecciona y copia los detalles con Ctrl+C."); } } },
+    { label: "Cerrar", primary: true, fn: c => c() }
+  ]);
 }
 /* remove form fields / text boxes (annotations) from a page, matched by type and position */
 function removeAnnots(out, page, anns) {
