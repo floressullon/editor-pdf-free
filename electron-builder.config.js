@@ -6,7 +6,9 @@ module.exports = {
   productName: app.name,
   artifactName: "${name}-${version}-${os}-${arch}.${ext}",
   directories: { output: "dist" },
-  files: ["electron/**", "public/**", "scripts/serve.js", "package.json"],
+  // La app no usa módulos de Node: las librerías ya van copiadas en public/vendor
+  npmRebuild: false,
+  files: ["electron/**", "public/**", "scripts/serve.js", "package.json", "!**/node_modules/**"],
   icon: "build/icon.png",
   // "Abrir con…" y doble clic sobre un PDF (no se convierte en el lector predeterminado sin permiso)
   fileAssociations: [{ ext: "pdf", name: "Documento PDF", description: "Documento PDF", role: "Editor", mimeType: "application/pdf" }],

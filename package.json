@@ -27,12 +27,6 @@
     "package:linux": "npm run vendor && electron-builder --config electron-builder.config.js --linux",
     "single": "node scripts/build-single.js"
   },
-  "dependencies": {
-    "jszip": "3.10.1",
-    "pdf-lib": "1.17.1",
-    "pdfjs-dist": "3.11.174",
-    "tesseract.js": "5.1.1"
-  },
   "optionalDependencies": {
     "@fontsource/bricolage-grotesque": "^5.0.0",
     "@fontsource/caveat": "^5.0.0",
@@ -45,6 +39,10 @@
   },
   "devDependencies": {
     "electron": "^35.0.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "jszip": "3.10.1",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "3.11.174",
+    "tesseract.js": "5.1.1"
   }
 }
