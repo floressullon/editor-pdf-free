@@ -28,6 +28,8 @@ html = html.replace(/<!-- Librerías:[\s\S]*?(?=<script>\n)/, m => {
   return cdn.join("\n") + "\n";
 });
 html = html.replace(/<link rel="icon"[^>]*>\n?/, "");
+// tipografías: en un solo archivo se cargan directamente de Google Fonts
+html = html.replace(/<!-- Tipografías:[^\n]*\n<link rel="stylesheet" href="vendor\/fonts\/fonts\.css" data-fallback="([^"]+)"[^>]*>/, (_, g) => `<link rel="stylesheet" href="${g}">`);
 
 if (fragment) {
   const head = html.match(/<head>([\s\S]*?)<\/head>/)[1];

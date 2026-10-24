@@ -15,7 +15,7 @@ Este proyecto se distribuye bajo la licencia [MIT](LICENSE). Usa los siguientes 
 
 ## Fuentes tipográficas
 
-Se cargan desde Google Fonts y se usan solo en la interfaz y en la firma escrita.
+Vienen incluidas con `npm install` (paquetes de Fontsource) y se usan solo en la interfaz y en la firma escrita. Si no están instaladas, la versión web las carga desde Google Fonts.
 
 | Fuente | Licencia |
 |---|---|

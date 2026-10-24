@@ -1,6 +1,6 @@
 {
   "name": "editor-pdf-free",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Editor de PDF gratuito y de código abierto: editar y borrar el texto existente, OCR, fusionar, organizar páginas, agregar texto, imágenes y firmas. Funciona en el navegador y como app de escritorio.",
   "license": "MIT",
   "author": "Colaboradores del proyecto",
@@ -34,6 +34,12 @@
     "tesseract.js": "5.1.1"
   },
   "optionalDependencies": {
+    "@fontsource/bricolage-grotesque": "^5.0.0",
+    "@fontsource/caveat": "^5.0.0",
+    "@fontsource/dancing-script": "^5.0.0",
+    "@fontsource/great-vibes": "^5.0.0",
+    "@fontsource/ibm-plex-mono": "^5.0.0",
+    "@fontsource/ibm-plex-sans": "^5.0.0",
     "@tesseract.js-data/eng": "^1.0.0",
     "@tesseract.js-data/spa": "^1.0.0"
   },

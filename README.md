@@ -2,6 +2,27 @@
 
 Editor de PDF **gratuito y de código abierto**. Funciona en el navegador o como aplicación de escritorio (Windows, macOS y Linux). Tus archivos **nunca se suben a ningún servidor**: todo se procesa en tu propia computadora.
 
+## Descargar e instalar (recomendado)
+
+Ve a **[Releases](https://github.com/floressullon/editor-pdf-free/releases/latest)** y descarga el archivo para tu sistema:
+
+| Sistema | Archivo | Cómo usarlo |
+|---|---|---|
+| Windows (instalador) | `editor-pdf-free-…-win-x64.exe` | Doble clic e instalar. Crea accesos directos en el escritorio y el menú Inicio |
+| Windows (sin instalar) | `editor-pdf-free-…-win-portable.exe` | Doble clic y listo; útil en una USB o sin permisos de administrador |
+| macOS | `editor-pdf-free-…-mac-….dmg` | Abrir y arrastrar la app a Aplicaciones |
+| Linux | `editor-pdf-free-…-linux-x86_64.AppImage` | Dar permiso de ejecución y abrir |
+
+**Privacidad:** la versión de escritorio funciona **sin internet**. Todo (librerías, tipografías, OCR) viene incluido y la app bloquea cualquier conexión externa: tus documentos nunca salen de tu computadora.
+
+**Abrir con doble clic:** después de instalar, haz clic derecho sobre un PDF → *Abrir con* → *Editor PDF Free*. Si quieres, marca la opción de usarlo siempre.
+
+**Aviso de seguridad la primera vez:** los instaladores todavía no tienen firma digital (un certificado cuesta dinero cada año), así que el sistema avisa:
+- Windows: "Windows protegió su PC" → **Más información** → **Ejecutar de todas formas**.
+- macOS: clic derecho sobre la app → **Abrir** → **Abrir**. Si dice que la app "está dañada", ejecuta en Terminal: `xattr -cr "/Applications/Editor PDF Free.app"`.
+
+Como el código es abierto, cualquiera puede revisarlo o compilarlo por su cuenta (ver más abajo).
+
 ## Funciones
 
 | Área | Qué puedes hacer |
@@ -52,7 +73,7 @@ npm install      # descarga dependencias y copia las librerías a public/vendor 
 npm start        # abre el editor en http://localhost:5173
 ```
 
-### Opción 3: aplicación de escritorio
+### Opción 3: compilar la aplicación de escritorio tú mismo
 ```bash
 npm install
 npm run desktop          # abre el editor en su propia ventana
@@ -70,8 +91,8 @@ El repositorio trae dos automatizaciones en `.github/workflows/`:
 - **Instaladores** (`release.yml`): al crear una etiqueta de versión, GitHub compila los instaladores para Windows, macOS y Linux y los adjunta a un *Release*:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 Los instaladores no están firmados digitalmente, así que Windows y macOS mostrarán un aviso la primera vez ("Más información → Ejecutar de todas formas" en Windows; clic derecho → Abrir en macOS).
@@ -100,8 +121,9 @@ public/
   js/app.js         toda la lógica del editor
   js/pdf-text-remover.js  borra el texto original dentro del contenido de la página
   vendor/           librerías copiadas por npm install (no se sube a git)
-electron/main.js    ventana de escritorio
-electron-builder.config.js  configuración de los instaladores
+electron/main.js    ventana de escritorio (sin conexión a internet)
+electron/preload.js recibe los PDF abiertos con doble clic
+electron-builder.config.js  configuración de los instaladores y asociación con archivos PDF
 scripts/            copia de librerías, servidor local y versión de un solo archivo (npm run single)
 build/icon.png      ícono de la app
 ```
@@ -115,8 +137,9 @@ build/icon.png      ícono de la app
 - [x] OCR (reconocer texto en documentos escaneados)
 - [ ] Editar párrafos completos (reacomodar el texto al cambiar una línea)
 - [ ] Hacer buscables los PDF escaneados (capa de texto invisible del OCR)
-- [ ] Abrir PDF con doble clic desde el explorador de archivos (versión de escritorio)
-- [ ] Fuentes de firma incluidas para uso 100 % sin conexión
+- [x] Abrir PDF con doble clic desde el explorador de archivos (versión de escritorio)
+- [x] Tipografías incluidas para uso 100 % sin conexión
+- [ ] Firma digital de los instaladores (para evitar el aviso de seguridad)
 
 ## Contribuir
 

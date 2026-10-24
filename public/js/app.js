@@ -1694,4 +1694,12 @@ function loadSample() {
 resetHistory(); renderAll(false);
 setTool("select");
 updUndo();
+/* desktop app: files opened with double click / "Open with" */
+if (window.desktop && typeof window.desktop.onOpenFiles === "function") {
+  window.desktop.onOpenFiles(list => {
+    const files = (list || []).map(f => new File([f.data], f.name, { type: /\.pdf$/i.test(f.name) ? "application/pdf" : "" }));
+    if (files.length) handleFiles(files, "open");
+  });
+  window.desktop.ready();
+}
 })();

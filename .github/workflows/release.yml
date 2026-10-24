@@ -1,4 +1,4 @@
-# Genera los instaladores de Windows, macOS y Linux cuando publicas una etiqueta de versión (por ejemplo v0.1.0)
+# Genera los instaladores de Windows, macOS y Linux cuando publicas una etiqueta de versión (por ejemplo v0.3.0)
 # y los adjunta automáticamente a un Release de GitHub.
 name: Instaladores
 
@@ -23,6 +23,13 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Comprobar que todo va incluido (la app no usa internet)
+        shell: bash
+        run: |
+          for f in pdf.min.js pdf.worker.min.js pdf-lib.min.js jszip.min.js fonts/fonts.css tesseract/tesseract.min.js tesseract/worker.min.js; do
+            test -s "public/vendor/$f" || { echo "Falta public/vendor/$f"; exit 1; }
+          done
+          ls public/vendor/tesseract/lang public/vendor/fonts
       - name: Empaquetar y publicar
         run: npx electron-builder --config electron-builder.config.js --publish always
         env:

@@ -44,4 +44,27 @@ for (const lang of ["spa", "eng"]) {
   if (!copy(src, path.join(tdir, "lang", `${lang}.traineddata.gz`))) console.warn(`  Idioma OCR "${lang}" no instalado: se descargará de internet al usar el OCR.`);
 }
 
+// Tipografías (Fontsource, licencia SIL OFL): así la app no necesita Google Fonts
+const FONTS = [
+  ["ibm-plex-sans", "IBM Plex Sans", [400, 500, 600]],
+  ["ibm-plex-mono", "IBM Plex Mono", [400, 500]],
+  ["bricolage-grotesque", "Bricolage Grotesque", [600, 700]],
+  ["caveat", "Caveat", [600]],
+  ["dancing-script", "Dancing Script", [600]],
+  ["great-vibes", "Great Vibes", [400]]
+];
+const fdir = path.join(out, "fonts");
+let css = "/* Generado por scripts/copy-vendor.js — tipografías incluidas (SIL Open Font License) */\n";
+for (const [id, family, weights] of FONTS) {
+  const d = pkgDir(`@fontsource/${id}`);
+  for (const w of weights) {
+    const f = d && path.join(d, "files", `${id}-latin-${w}-normal.woff2`);
+    if (f && copy(f, path.join(fdir, path.basename(f)))) {
+      css += `@font-face{font-family:"${family}";font-style:normal;font-weight:${w};font-display:swap;src:url("${path.basename(f)}") format("woff2")}\n`;
+    }
+  }
+}
+if (css.includes("@font-face")) { fs.mkdirSync(fdir, { recursive: true }); fs.writeFileSync(path.join(fdir, "fonts.css"), css); console.log("  public/vendor/fonts/fonts.css"); }
+else console.warn("  Tipografías no instaladas: se cargarán de Google Fonts (o las del sistema sin internet).");
+
 console.log(missing ? "Algunas librerías no se copiaron; el editor las cargará desde internet." : "Librerías copiadas en public/vendor.");
