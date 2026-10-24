@@ -887,7 +887,7 @@ function fontInfo(pg, fontName, st) {
   try { if (pg.commonObjs.has(fontName)) { const f = pg.commonObjs.get(fontName); name = f.name || ""; bold = !!(f.bold || f.black); italic = !!f.italic; } } catch { }
   const fam = (st && st.fontFamily) || "";
   const font = fam === "monospace" || /courier|mono|consol/i.test(name) ? "Courier"
-    : fam === "serif" || /times|serif|georgia|garamond|cambria|roman|palatino|book|cmr|lmr|minion/i.test(name) ? "Times" : "Helvetica";
+    : fam === "serif" || /times|serif|georgia|garamond|cambria|caladea|constantia|baskerville|bodoni|didot|century|schoolbook|palatino|book|antiqua|minion|charter|cmr|lmr|roman|tinos|merriweather|lora|playfair|crimson|cormorant|libre ?baskerville|pt ?serif|noto ?serif|droid ?serif|bitstream ?charter/i.test(name) ? "Times" : "Helvetica";
   if (/bold|black|heavy|semibold|demi/i.test(name)) bold = true;
   if (/italic|oblique|cmti|lmri/i.test(name)) italic = true;
   return { font, bold, italic, fontLabel: name.replace(/^[A-Z]{6}\+/, "") };

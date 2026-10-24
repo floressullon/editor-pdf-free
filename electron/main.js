@@ -56,7 +56,7 @@ async function createWindow() {
     minWidth: 420,
     minHeight: 500,
     title: config.name,
-    icon: path.join(__dirname, "..", "build", "icon.png"),
+    icon: path.join(__dirname, "..", "public", "icon.png"),
     autoHideMenuBar: true,
     backgroundColor: "#e6e9ef",
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, "preload.js") }
