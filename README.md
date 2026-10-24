@@ -88,7 +88,7 @@ npm run package:linux    # Linux (.AppImage)
 El repositorio trae dos automatizaciones en `.github/workflows/`:
 
 - **Versión web** (`pages.yml`): cada cambio en la rama `main` se publica en GitHub Pages. Actívalo una vez en *Settings → Pages → Source: GitHub Actions*. Quedará en `https://TU-USUARIO.github.io/editor-pdf-free/`.
-- **Instaladores** (`release.yml`): al crear una etiqueta de versión, GitHub compila los instaladores para Windows, macOS y Linux y los adjunta a un *Release*:
+- **Instaladores** (`release.yml`): GitHub compila los instaladores para Windows, macOS y Linux y los deja en un *Release* en borrador, que revisas y publicas con **Publish release**. Se lanza desde *Actions → Instaladores → Run workflow*, o al subir una etiqueta de versión (la versión sale de `package.json`):
 
 ```bash
 git tag v0.3.0

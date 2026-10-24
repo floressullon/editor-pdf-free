@@ -1,5 +1,6 @@
-# Genera los instaladores de Windows, macOS y Linux cuando publicas una etiqueta de versión (por ejemplo v0.3.0)
-# y los adjunta automáticamente a un Release de GitHub.
+# Genera los instaladores de Windows, macOS y Linux y los deja en un Release BORRADOR de GitHub
+# (versión tomada de package.json). Se ejecuta al subir una etiqueta (por ejemplo v0.3.0) o a mano
+# desde la pestaña Actions → Instaladores → Run workflow. Revisa el borrador y pulsa "Publish release".
 name: Instaladores
 
 on:

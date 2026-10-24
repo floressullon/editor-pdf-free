@@ -15,5 +15,5 @@ module.exports = {
   portable: { artifactName: "${name}-${version}-win-portable.${ext}" },
   mac: { target: ["dmg"], category: "public.app-category.productivity" },
   linux: { target: ["AppImage"], category: "Office" },
-  publish: { provider: "github", releaseType: "release" }
+  publish: { provider: "github", releaseType: "draft" }   // queda como borrador: tú lo revisas y lo publicas
 };
